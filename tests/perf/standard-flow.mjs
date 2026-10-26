@@ -7,7 +7,7 @@ import process from "node:process";
 import { chromium } from "playwright";
 
 const ROOT = process.cwd();
-const BASE_PATH = "/eBirdTripPlanner/";
+const BASE_PATH = "/ebird-trip-planner/";
 const DEFAULT_THRESHOLDS = {
   firstLoadMs: 3500,
   ebdReadMs: 8000,

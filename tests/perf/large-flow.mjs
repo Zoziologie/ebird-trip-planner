@@ -20,7 +20,7 @@ import { mkdtemp } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const ROOT = process.cwd();
-const BASE_PATH = "/eBirdTripPlanner/";
+const BASE_PATH = "/ebird-trip-planner/";
 
 const fixture = process.argv[2];
 if (!fixture) {

@@ -103,7 +103,7 @@ const { loadTripBundle, resetTripBundleLoader } = useTripBundleLoader({
   includeEbd: true,
 });
 const appVersion = __APP_VERSION__;
-const repoUrl = "https://github.com/Zoziologie/eBirdTripPlanner";
+const repoUrl = "https://github.com/Zoziologie/ebird-trip-planner";
 const sponsorUrl = "https://github.com/sponsors/Zoziologie";
 const zoziologieUrl = "https://zoziologie.raphaelnussbaumer.com/";
 
