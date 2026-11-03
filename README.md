@@ -6,7 +6,7 @@ Plan birding trips from the eBird Basic Dataset (EBD) with an offline-friendly, 
 
 ## Main flow
 
-1. **My trips** is the landing page. Create an empty itinerary, create from `.zip`/`.txt` eBird data, import a backup, or open a cloud trip.
+1. **My trips** is the landing page. Load `.zip`/`.txt` eBird data to create a trip, import a backup, or open a cloud trip. Each trip contains its own EBD dataset and itinerary; creating a trip requires data with at least one location. Older trips without EBD ask for data before opening the planner and keep their existing stops and notes.
 2. In a trip, switch between **Map** and **Species** while keeping the same itinerary selection. Edit stops inline, resize their areas, shift groups of stops, and undo changes.
 3. **Trip settings** groups metadata, backups, map/display preferences, personal life/region lists and eBird report connection/refresh. Sharing remains in the toolbar.
 4. Edits save automatically on the device. Signed-in creation enables cloud autosave by default; offline edits sync on reconnection, with recovery copies for conflicting edits.
@@ -22,7 +22,7 @@ Plan birding trips from the eBird Basic Dataset (EBD) with an offline-friendly, 
 - Offline PWA persistence, cloud autosave, friend sharing, co-traveler editing and conflict recovery.
 - Existing local trips and v1–v3 JSON/compressed archives remain readable. The old separate planning pages have been retired.
 
-See [workspace development and validation](docs/workspace-development.md) for data limits, test commands, migration details and remaining work. Undated planning and additional national map providers are not implemented.
+See [workspace development and validation](docs/workspace-development.md) for data limits, test commands and migration details, and the [v2 release checklist](docs/v2-release-checklist.md) for remaining decisions and validation. Undated planning and additional national map providers are not implemented.
 
 ## Tech stack
 
