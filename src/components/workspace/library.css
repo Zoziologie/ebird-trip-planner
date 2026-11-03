@@ -106,36 +106,18 @@
   font-weight: 600;
   margin: 0 0 8px;
 }
-.library-heading p {
-  margin: 0;
-}
 .library-muted {
   color: var(--muted);
   font-size: 12px;
 }
-.library-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin: 0 0 18px;
+.trip-group {
+  margin-bottom: 32px;
 }
-.library-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 280px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--paper);
-  padding: 0 10px;
-  color: var(--muted);
-}
-.library-search input {
-  border: 0;
-  margin: 0;
-  background: transparent;
-  padding-left: 0;
+.trip-group > h2 {
+  margin: 0 0 14px;
+  color: #354441;
+  font-size: 16px;
+  font-weight: 600;
 }
 .trip-cards {
   display: grid;
@@ -166,16 +148,25 @@
 .trip-storage i {
   font-size: 15px;
 }
-.trip-card h2 {
+.trip-card h3 {
   font-size: 21px;
   font-weight: 600;
   margin: 20px 0 7px;
   overflow-wrap: anywhere;
 }
+.trip-dates {
+  margin: 0 0 7px;
+  color: #354441;
+}
+.trip-dates i {
+  margin-right: 5px;
+  color: var(--green);
+}
 .trip-card-footer {
   border-top: 1px solid var(--line);
   padding-top: 16px;
   margin-top: 24px;
+  justify-content: flex-end;
 }
 .trip-card-footer button {
   padding: 7px 11px;
@@ -361,10 +352,6 @@
   }
   .library-heading h1 {
     font-size: 25px;
-  }
-  .library-search {
-    width: 230px;
-    max-width: 80%;
   }
   .trip-cards {
     grid-template-columns: 1fr;

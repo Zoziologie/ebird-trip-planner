@@ -36,11 +36,11 @@ import {
 import { getWorkspaceCloud } from '../utils/workspaceCloud';
 import { workspaceVisits } from '../utils/workspacePlan';
 import { prepareWorkspace } from '../utils/workspaceLocal';
-import { workspaceStatuses } from '../state/workspaceSync';
 import { enableTripCloud } from '../utils/tripCloudSetup';
 import { readTripArchive, restoreTripArchive } from '../utils/tripData';
 import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
 import { uniqueTripName } from '../utils/tripNames';
+import { tripDates } from '../utils/tripDates';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
 const router = useRouter(),
@@ -78,25 +78,33 @@ const importing = ref(false),
   removal = ref(null);
 const createDialog = ref(null),
   removeDialog = ref(null);
-const search = ref(''),
-  capacity = ref(false),
+const capacity = ref(false),
   slots = ref(2),
   reason = ref('');
 const version = __APP_VERSION__;
+const now = ref(new Date());
+const clock = setInterval(() => (now.value = new Date()), 60000);
 const subscription = liveQuery(async () => {
   const local = await db.trips.orderBy('updatedAt').reverse().toArray();
   return Promise.all(
-    local.map(async (trip) => ({
-      ...trip,
-      stopCount: await db.visits.where('tripId').equals(trip.id).count(),
-      sync: await db.workspaceSync.get(trip.id),
-    })),
+    local.map(async (trip) => {
+      const visits = await db.visits.where('tripId').equals(trip.id).toArray();
+      return {
+        ...trip,
+        stopCount: visits.length,
+        visits,
+        sync: await db.workspaceSync.get(trip.id),
+      };
+    }),
   );
 }).subscribe((value) => {
   rows.value = value;
   trips.value = value;
 });
-onBeforeUnmount(() => subscription.unsubscribe());
+onBeforeUnmount(() => {
+  subscription.unsubscribe();
+  clearInterval(clock);
+});
 const names = computed(() => [
   ...rows.value,
   ...cloudLibrary.value.filter((trip) => trip.revision),
@@ -109,6 +117,7 @@ const library = computed(() => {
   return [
     ...rows.value.map((trip) => ({
       ...trip,
+      dates: tripDates(trip.visits, trip.timeZone, now.value),
       localId: trip.id,
       cloudId: cloudBindings.value[trip.id]?.id || '',
       cloud: cloudLibrary.value.find((item) => item.id === cloudBindings.value[trip.id]?.id),
@@ -119,13 +128,31 @@ const library = computed(() => {
         ...trip,
         name: cloudPlans.value[trip.id]?.name || trip.name,
         stopCount: cloudPlans.value[trip.id]?.stops.length,
+        dates: cloudPlans.value[trip.id]
+          ? tripDates(
+              cloudPlans.value[trip.id].stops,
+              cloudPlans.value[trip.id].timeZone,
+              now.value,
+            )
+          : { group: 'undated', label: 'Dates unavailable' },
         timeZone: cloudPlans.value[trip.id]?.timeZone,
         localId: '',
         cloudId: trip.id,
         cloud: trip,
       })),
-  ].filter((trip) => trip.name.toLowerCase().includes(search.value.toLowerCase()));
+  ];
 });
+const groups = computed(() =>
+  [
+    { id: 'current', title: 'Current' },
+    { id: 'upcoming', title: 'Coming up' },
+    { id: 'past', title: 'Past' },
+    { id: 'undated', title: 'Dates unavailable' },
+  ].map((group) => ({
+    ...group,
+    trips: library.value.filter((trip) => trip.dates.group === group.id),
+  })),
+);
 const run = async (action) => {
   busy.value = true;
   error.value = '';
@@ -377,9 +404,6 @@ onBeforeUnmount(() => {
       <div class="library-heading">
         <div>
           <h1>My trips</h1>
-          <p class="library-muted">
-            Plan at home. Take your trip into the field. Share it with friends.
-          </p>
         </div>
         <div class="library-actions">
           <button :disabled="busy" @click="start('import')">
@@ -398,95 +422,84 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="status" class="library-notice" role="status">{{ status }}</p>
       <p v-if="cloudError" class="library-error" role="alert">{{ cloudError }}</p>
-      <div class="library-toolbar">
-        <label class="library-search"
-          ><i aria-hidden="true" class="bi bi-search"></i
-          ><input
-            v-model="search"
-            type="search"
-            placeholder="Find a trip"
-            aria-label="Find a trip" /></label
-        ><span class="library-muted"
-          >{{ library.length }} {{ library.length === 1 ? 'trip' : 'trips' }}</span
+      <template v-if="library.length">
+        <section
+          v-for="group in groups.filter((group) => group.trips.length)"
+          :key="group.id"
+          class="trip-group"
         >
-      </div>
-      <div v-if="library.length" class="trip-cards">
-        <article v-for="item in library" :key="item.localId || item.cloudId" class="trip-card">
-          <div class="trip-card-top">
-            <span class="trip-storage"
-              ><i
-                aria-hidden="true"
-                :class="'bi bi-' + (item.cloudId ? 'cloud-check' : 'device-ssd')"
-              ></i>
-              {{ connection(item) }}</span
+          <h2>{{ group.title }}</h2>
+          <div class="trip-cards">
+            <article
+              v-for="item in group.trips"
+              :key="item.localId || item.cloudId"
+              class="trip-card"
             >
-            <details class="trip-card-menu">
-              <summary :aria-label="'Options for ' + item.name">
-                <i aria-hidden="true" class="bi bi-three-dots"></i>
-              </summary>
-              <div>
+              <div class="trip-card-top">
+                <span class="trip-storage"
+                  ><i
+                    aria-hidden="true"
+                    :class="'bi bi-' + (item.cloudId ? 'cloud-check' : 'device-ssd')"
+                  ></i>
+                  {{ connection(item) }}</span
+                >
+                <details class="trip-card-menu">
+                  <summary :aria-label="'Options for ' + item.name">
+                    <i aria-hidden="true" class="bi bi-three-dots"></i>
+                  </summary>
+                  <div>
+                    <button
+                      :disabled="busy || (!item.localId && !online)"
+                      @click="run(() => backup(item))"
+                    >
+                      Download backup</button
+                    ><button
+                      v-if="item.localId && !item.sync?.cloudId && cloudUser"
+                      :disabled="busy || !online"
+                      @click="enable(item)"
+                    >
+                      Enable cloud autosave</button
+                    ><button v-if="item.localId" :disabled="busy" @click="askRemove(item)">
+                      Remove device copy…</button
+                    ><button
+                      v-if="item.cloud?.owned"
+                      :disabled="busy || !online"
+                      @click="askRemove(item, true)"
+                    >
+                      Delete cloud trip…
+                    </button>
+                  </div>
+                </details>
+              </div>
+              <h3>{{ item.name }}</h3>
+              <p class="trip-dates">
+                <i class="bi bi-calendar3" aria-hidden="true"></i> {{ item.dates.label }}
+              </p>
+              <p class="library-muted">
+                {{
+                  item.stopCount !== undefined
+                    ? item.stopCount + ' stops'
+                    : 'Open to download for offline use'
+                }}<span v-if="item.timeZone"> · {{ item.timeZone.replaceAll('_', ' ') }}</span>
+              </p>
+              <div class="trip-card-footer">
                 <button
-                  :disabled="busy || (!item.localId && !online)"
-                  @click="run(() => backup(item))"
+                  class="primary"
+                  :disabled="busy || (!item.localId && (!online || !cloudReady))"
+                  @click="open(item)"
                 >
-                  Download backup</button
-                ><button
-                  v-if="item.localId && !item.sync?.cloudId && cloudUser"
-                  :disabled="busy || !online"
-                  @click="enable(item)"
-                >
-                  Enable cloud autosave</button
-                ><button v-if="item.localId" :disabled="busy" @click="askRemove(item)">
-                  Remove device copy…</button
-                ><button
-                  v-if="item.cloud?.owned"
-                  :disabled="busy || !online"
-                  @click="askRemove(item, true)"
-                >
-                  Delete cloud trip…
+                  Open trip <i aria-hidden="true" class="bi bi-arrow-right"></i>
                 </button>
               </div>
-            </details>
+            </article>
           </div>
-          <h2>{{ item.name }}</h2>
-          <p class="library-muted">
-            {{
-              item.stopCount !== undefined
-                ? item.stopCount + ' stops'
-                : 'Open to download for offline use'
-            }}<span v-if="item.timeZone"> · {{ item.timeZone.replaceAll('_', ' ') }}</span>
-          </p>
-          <div class="trip-card-footer">
-            <span class="library-muted">{{
-              item.sync?.cloudId
-                ? workspaceStatuses[item.localId] || 'Available offline'
-                : item.cloud && !item.cloud.owned
-                  ? 'Shared with you'
-                  : item.localId
-                    ? 'Available offline'
-                    : 'Your cloud trip'
-            }}</span
-            ><button
-              class="primary"
-              :disabled="busy || (!item.localId && (!online || !cloudReady))"
-              @click="open(item)"
-            >
-              Open trip <i aria-hidden="true" class="bi bi-arrow-right"></i>
-            </button>
-          </div>
-        </article>
-      </div>
+        </section>
+      </template>
       <div v-else class="library-empty">
         <i aria-hidden="true" class="bi bi-map"></i>
-        <h2>{{ search ? 'No matching trips' : 'Your next birding trip starts here' }}</h2>
-        <p>
-          {{
-            search
-              ? 'Try another name.'
-              : 'Load eBird data to plan a trip, or import a saved trip backup.'
-          }}
-        </p>
-        <button v-if="!search" class="primary" @click="start('new')">Create your first trip</button>
+        <h2>Your next birding trip starts here</h2>
+        <p>Load eBird data to plan a trip, or import a saved trip backup.</p>
+        <button class="primary" @click="start('new')">Create your first trip</button>
       </div>
       <footer class="library-footer">
         <span>v{{ version }} · Edits save automatically on this device.</span>
