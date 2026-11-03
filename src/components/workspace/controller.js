@@ -520,7 +520,7 @@ export function mountWorkspace(root, model, options) {
     }
   }
   // Geometry edits refresh both datasets locally; eBird's original checklists stay unchanged.
-  function updateSpatial(stop, moved = false) {
+  function updateSpatial(stop, previousCoords = null) {
     memberships.set(
       stop.id,
       new Set(
@@ -533,7 +533,7 @@ export function mountWorkspace(root, model, options) {
     );
     reportAggregates.clear();
     computeSpatial(stop);
-    if (moved) {
+    if (previousCoords && distance(previousCoords, stop.coords) >= 1 - 1e-9) {
       routes.delete(stop.id);
       const next = stops[stops.indexOf(stop) + 1];
       if (next) routes.delete(next.id);
@@ -688,9 +688,11 @@ export function mountWorkspace(root, model, options) {
           e.stopPropagation();
           if (!editable()) choose(id);
         };
+        let previousCoords;
         marker.on('dragstart', () => {
           rememberEdit();
           dragging = true;
+          previousCoords = [...current().coords];
         });
         marker.on('drag', () => {
           const c = marker.getLngLat(),
@@ -701,7 +703,7 @@ export function mountWorkspace(root, model, options) {
         });
         marker.on('dragend', () => {
           dragging = false;
-          updateSpatial(current(), true);
+          updateSpatial(current(), previousCoords);
         });
         button.onkeydown = (e) => {
           const bearing = { ArrowUp: 0, ArrowRight: 90, ArrowDown: 180, ArrowLeft: 270 }[e.key];
@@ -709,13 +711,14 @@ export function mountWorkspace(root, model, options) {
           e.preventDefault();
           e.stopPropagation();
           rememberEdit();
-          const stop = current();
+          const stop = current(),
+            previousCoords = [...stop.coords];
           stop.coords = destination(
             stop.coords,
             e.shiftKey ? 1 : 0.1,
             bearing,
           ).geometry.coordinates;
-          updateSpatial(stop, true);
+          updateSpatial(stop, previousCoords);
           button.focus();
         };
       }
@@ -1026,13 +1029,11 @@ export function mountWorkspace(root, model, options) {
     if (lastDetailStop !== s.id) {
       $('stop-extra-details').open = false;
       $('interest-details').open = true;
-      $('note-details').open = !!s.note;
       lastDetailStop = s.id;
     }
     $('interest-label').textContent = s.targets.length
       ? 'Species of interest'
       : 'Add species of interest';
-    $('note-label').textContent = s.note ? 'Note' : 'Add a note';
     for (const [id, value] of Object.entries({
       name: s.name,
       type: s.type,
@@ -1043,7 +1044,6 @@ export function mountWorkspace(root, model, options) {
       $(id).value = value;
     if (writable()) $('stop-extra-body').append($('selection-stats'), $('remove'));
     else root.querySelector('.itinerary').append($('selection-stats'));
-    $('comments-panel').open = true;
     $('type-icon').className = 'bi bi-' + icons[s.type];
     $('duration').disabled = $('target-search').disabled = s.type !== 'Birding';
     $('target-search').value = '';
@@ -1534,7 +1534,6 @@ export function mountWorkspace(root, model, options) {
         : 'Add species of interest';
       if (value.length) $('interest-details').open = true;
     }
-    if (field === 'note') $('note-label').textContent = value ? 'Note' : 'Add a note';
     if (field === 'note') {
       queueSave();
       return;
@@ -1669,16 +1668,16 @@ export function mountWorkspace(root, model, options) {
       );
     $('historical-stats').innerHTML = writable()
       ? '<div class="stats-label">Historical EBD selection</div><div class="stats-grid"><span><b>' +
-        species.size +
-        '</b> species</span><span><b>' +
-        locations.reduce((n, l) => n + l.totalCount, 0).toLocaleString() +
-        '</b> checklists</span><span><b>' +
-        locations.length +
-        '</b> locations</span><span><b>' +
         (minutes === null ? '—' : Math.round(minutes) + ' min') +
         '</b> median duration</span><span><b>' +
         (km === null ? '—' : km.toFixed(1) + ' km') +
-        '</b> median distance</span></div>'
+        '</b> median distance</span></div><div class="stats-grid stats-secondary"><span>' +
+        species.size +
+        ' species</span><span>' +
+        locations.reduce((n, l) => n + l.totalCount, 0).toLocaleString() +
+        ' checklists</span><span>' +
+        locations.length +
+        ' locations</span></div>'
       : '';
     $('recorded-stats').innerHTML = lists.length
       ? '<div class="recorded-stats"><strong>Trip report</strong><span>' +
@@ -1695,32 +1694,7 @@ export function mountWorkspace(root, model, options) {
       : '';
     $('selection-stats').hidden = !writable() && !lists.length;
     $('comment-feedback').textContent = '';
-    $('comments-count').textContent = commentEntries.length + ' lists';
     $('copy-comments').disabled = $('download-comments').disabled = !commentEntries.length;
-    $('comment-preview').innerHTML =
-      commentEntries
-        .slice(0, 8)
-        .map(
-          (c) =>
-            '<article><strong>' +
-            escape(commentLocations.get(c.locality_id).locality) +
-            '</strong><span class="small">' +
-            escape(c.date) +
-            '</span>' +
-            c.species_comments
-              .map(
-                ([code, text]) =>
-                  '<p><b>' + escape(taxa.get(code)?.name || code) + '</b> ' + escape(text) + '</p>',
-              )
-              .join('') +
-            '</article>',
-        )
-        .join('') +
-      (commentEntries.length > 8
-        ? '<p class="small">Copy or download all ' +
-          commentEntries.length +
-          ' comment-bearing checklists.</p>'
-        : '');
   }
   function commentsMarkdown() {
     return buildCommentMarkdown({
@@ -2010,8 +1984,7 @@ export function mountWorkspace(root, model, options) {
       else if (['historical-stats', 'recorded-stats'].includes(id)) $('stop-stats').append(field);
       else if (id === 'comments-panel') $('selection-stats').append(field);
       else $('stop-extra-body').append(field);
-      if ((id === 'interest-details' || id === 'note-details') && mode === 'default')
-        field.open = true;
+      if (id === 'interest-details' && mode === 'default') field.open = true;
     }
     $('selection-stats').hidden =
       inline ||
@@ -2022,7 +1995,6 @@ export function mountWorkspace(root, model, options) {
       $('default-timing').append($('datetime-field'));
       $('stop-default-body').append($('note-details'));
       $('note-details').hidden = false;
-      $('note-details').open = true;
     }
     // Removing a stop is always accessible, even when every optional field is hidden.
     $('stop-extra-body').append($('remove'));

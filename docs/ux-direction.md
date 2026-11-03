@@ -1,6 +1,6 @@
 # Trip workspace: interaction specification
 
-Status: round 4, 18 October 2026. Review prototype at `/eBirdTripPlanner/docs/prototypes/trip-workspace.html`; production app unchanged. Screen, Access and Trip stage are prototype controls. Reload discards edits. Cloud save/share feedback is still simulated, but the Oman plan, EBD data and eBird observations are real cached data.
+Status: round 4, 18 October 2026. Review prototype at `/ebird-trip-planner/docs/prototypes/trip-workspace.html`; production app unchanged. Screen, Access and Trip stage are prototype controls. Reload discards edits. Cloud save/share feedback is still simulated, but the Oman plan, EBD data and eBird observations are real cached data.
 
 ## Central workspace
 

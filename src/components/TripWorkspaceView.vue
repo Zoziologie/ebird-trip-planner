@@ -14,6 +14,7 @@ const props = defineProps({
   saveLists: Function,
 });
 const root = ref(null);
+const mapError = ref(false);
 const stopFields = [
   ['datetime-field', 'Date & time'],
   ['duration-field', 'Duration'],
@@ -25,15 +26,20 @@ const stopFields = [
 ];
 let controller;
 onMounted(() => {
-  controller = mountWorkspace(root.value, props.model, {
-    initialView: props.initialView,
-    visitor: props.visitor,
-    invited: props.invited,
-    getPlan: () => props.plan,
-    onSave: props.save,
-    onReport: props.saveReport,
-    onLists: props.saveLists,
-  });
+  try {
+    controller = mountWorkspace(root.value, props.model, {
+      initialView: props.initialView,
+      visitor: props.visitor,
+      invited: props.invited,
+      getPlan: () => props.plan,
+      onSave: props.save,
+      onReport: props.saveReport,
+      onLists: props.saveLists,
+    });
+  } catch (error) {
+    if (!/failed to initialize webgl/i.test(error.message)) throw error;
+    mapError.value = true;
+  }
 });
 watch(
   () => [props.plan.name, props.plan.timeZone],
@@ -44,7 +50,19 @@ onBeforeUnmount(() => controller?.destroy());
 
 <template>
   <div ref="root" class="trip-workspace-ui">
-    <div id="workspace-layout" class="app">
+    <section v-if="mapError" class="map-error" role="alert">
+      <h1>Could not open the map</h1>
+      <p>Your browser could not start WebGL, which the trip workspace needs to display the map.</p>
+      <p>
+        Try reloading the page. If the problem continues, check that hardware acceleration is
+        enabled or open the trip in another browser.
+      </p>
+      <div class="map-error-actions">
+        <button class="primary" @click="() => $router.go(0)">Reload</button>
+        <router-link to="/trips">My trips</router-link>
+      </div>
+    </section>
+    <div v-show="!mapError" id="workspace-layout" class="app">
       <header class="header">
         <div class="identity">
           <slot name="library" /><span class="brand" aria-label="eBird Trip Planner"
@@ -191,10 +209,15 @@ onBeforeUnmount(() => controller?.destroy());
                       hidden
                     ></div>
                   </details>
-                  <details id="note-details" class="optional-field">
-                    <summary><span id="note-label">Add a note</span></summary>
-                    <textarea id="note" rows="2" aria-label="Stop notes"></textarea>
-                  </details>
+                  <div id="note-details" class="optional-field">
+                    <label for="note">Note</label>
+                    <textarea
+                      id="note"
+                      rows="2"
+                      aria-label="Stop notes"
+                      placeholder="Add a note"
+                    ></textarea>
+                  </div>
                 </div>
               </details>
             </div>
@@ -225,15 +248,14 @@ onBeforeUnmount(() => controller?.destroy());
               <div id="historical-stats"></div>
               <div id="recorded-stats"></div>
             </div>
-            <details id="comments-panel" class="edit-only">
-              <summary>Observer comments <span id="comments-count"></span></summary>
+            <div id="comments-panel" class="edit-only">
+              <span>Observer list comments</span>
               <div class="comment-actions">
                 <button id="copy-comments">Copy</button
                 ><button id="download-comments">Download .md</button
-                ><span id="comment-feedback" role="status"></span>
+                ><span id="comment-feedback" class="sr-only" role="status"></span>
               </div>
-              <div id="comment-preview"></div>
-            </details>
+            </div>
           </section>
           <span id="feedback" role="status" class="sr-only"></span>
         </aside>

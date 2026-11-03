@@ -15,7 +15,7 @@ export default defineConfig({
           },
         }
       : {},
-  base: '/eBirdTripPlanner/',
+  base: '/ebird-trip-planner/',
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },
@@ -98,16 +98,16 @@ export default defineConfig({
         theme_color: '#2a9d8f',
         background_color: '#ffffff',
         display: 'standalone',
-        scope: '/eBirdTripPlanner/',
-        start_url: '/eBirdTripPlanner/',
+        scope: '/ebird-trip-planner/',
+        start_url: '/ebird-trip-planner/',
         icons: [
           {
-            src: '/eBirdTripPlanner/pwa-192.png',
+            src: '/ebird-trip-planner/pwa-192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/eBirdTripPlanner/pwa-512.png',
+            src: '/ebird-trip-planner/pwa-512.png',
             sizes: '512x512',
             type: 'image/png',
           },

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.0-beta.3 — 2026-11-03
+
+- Group trips by their stop dates and show date ranges on simplified library cards.
+- Use the renamed `/ebird-trip-planner/` application path and show progress while opening a workspace.
+- Refine day headers, stop editor spacing, notes and historical EBD summaries.
+- Retain adjacent driving routes when a stop moves less than one kilometre in a single move.
+- Show recovery guidance if the browser cannot initialize WebGL; the workspace still requires WebGL.
+
+Existing links using the old `/eBirdTripPlanner/` path require a deployment-side redirect. See the [release checklist](docs/v2-release-checklist.md) for outstanding work.
+
 ## 2.0.0-beta.2 — 2026-11-03
 
 - Require eBird data when creating trips and support adding it to older trips that lack a dataset.

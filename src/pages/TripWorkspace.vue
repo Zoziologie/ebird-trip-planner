@@ -36,6 +36,7 @@ import {
 import { restoreTripArchive } from '../utils/tripData';
 import { decodeTripArchive } from '../utils/tripArchive';
 import TripWorkspaceView from '../components/TripWorkspaceView.vue';
+import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import { taxonomyByCode } from '../utils/taxonomy';
 import { workspaceModel } from '../utils/workspaceModel';
 import { tripTimeZone } from '../utils/tripTimeZone';
@@ -90,6 +91,7 @@ const saveLists = async (kind, taxa) => {
 const route = useRoute();
 const router = useRouter();
 const ready = ref(false);
+const loadingMessage = ref('Connecting to your trip…');
 const busy = ref(false);
 const error = ref('');
 const localPlan = shallowRef(null);
@@ -154,6 +156,7 @@ const bindDataset = (tripId, trip) =>
     savedVisitCount: 0,
   });
 const openSharedEditor = async (id) => {
+  loadingMessage.value = 'Checking trip access…';
   const cloud = await getWorkspaceCloud(id);
   if (!cloud)
     throw new Error(
@@ -174,6 +177,7 @@ const openSharedEditor = async (id) => {
     return;
   }
   const source = await getCloudTrip(id);
+  loadingMessage.value = 'Downloading your trip…';
   const payload = await decodeTripArchive(await downloadCloudTrip(source));
   const tripId = await restoreTripArchive(payload, { asCopy: true });
   await prepareWorkspace(tripId);
@@ -198,6 +202,7 @@ const attachLocal = async (tripId) => {
   sync?.stop();
   model.value = null;
   await writes;
+  loadingMessage.value = 'Loading your trip data…';
   await prepareWorkspace(tripId);
   await loadModel(await readWorkspacePlan(tripId), tripId);
   subscription = liveQuery(async () => ({
@@ -212,6 +217,7 @@ const attachLocal = async (tripId) => {
     recoveries.value = result.recoveries;
   });
   sync = watchWorkspaceSync(tripId);
+  loadingMessage.value = 'Checking for saved changes…';
   await sync.flush();
   const linked = await db.workspaceSync.get(tripId);
   if (navigator.onLine && linked?.cloudId && cloudUser.value?.uid === linked.accountId)
@@ -222,6 +228,7 @@ const attachLocal = async (tripId) => {
 const load = async () => {
   const request = ++loadId;
   ready.value = false;
+  loadingMessage.value = cloudId.value ? 'Connecting to your trip…' : 'Loading your trip data…';
   error.value = '';
   subscription?.unsubscribe();
   sync?.stop();
@@ -231,6 +238,7 @@ const load = async () => {
     if (visitor.value) {
       // Anonymous views cache only the published projection, never source archives.
       if (navigator.onLine) {
+        loadingMessage.value = 'Loading the shared trip…';
         const cloud = await getWorkspaceCloud(cloudId.value);
         if (!cloud) throw new Error('This workspace is unavailable.');
         visitorPlan.value = cloud.plan;
@@ -491,7 +499,14 @@ onBeforeUnmount(() => {
         <router-link to="/trips" class="btn btn-primary">My trips</router-link>
       </div>
     </template>
-    <p v-else-if="!error && !waitingSignIn" class="p-4">Opening workspace…</p>
+    <WorkspaceLoading
+      v-if="
+        !error &&
+        !waitingSignIn &&
+        (!ready || (selectedTripId && !visitor && (!localPlan || !model)))
+      "
+      :message="loadingMessage"
+    />
     <dialog :open="sharing" class="workspace-dialog border rounded shadow" aria-label="Share trip">
       <h2 class="h5">Share trip</h2>
       <label class="form-check"

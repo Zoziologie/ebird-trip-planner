@@ -40,6 +40,7 @@ import { enableTripCloud } from '../utils/tripCloudSetup';
 import { readTripArchive, restoreTripArchive } from '../utils/tripData';
 import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
 import { uniqueTripName } from '../utils/tripNames';
+import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import { tripDates } from '../utils/tripDates';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
@@ -66,6 +67,7 @@ watch(cloudLibrary, (items, previous, onCleanup) => {
 });
 const rows = ref([]),
   busy = ref(false),
+  opening = ref(''),
   error = ref(''),
   status = ref(''),
   online = ref(navigator.onLine);
@@ -183,34 +185,41 @@ const start = (kind) => {
   createDialog.value.showModal();
 };
 const openLocal = async (id) => {
+  opening.value = 'Preparing your saved trip…';
   await prepareWorkspace(id);
   await refreshTrips();
   selectedTripId.value = id;
   await router.push('/workspace');
 };
-const open = (item) =>
-  run(async () => {
-    if (item.localId) return openLocal(item.localId);
-    if (await getWorkspaceCloud(item.cloudId, { legacy: true }))
-      return router.push({ path: '/workspace', query: { cloud: item.cloudId, edit: '1' } });
-    // Keep older archived trips usable without overwriting a local trip or cloud file.
-    status.value = 'Downloading trip…';
-    const source = await getCloudTrip(item.cloudId);
-    const access = await getCloudAccess(item.cloudId);
-    const payload = await decodeTripArchive(await downloadCloudTrip(source));
-    const id = await restoreTripArchive(payload, { asCopy: true });
-    bindCloudTrip(id, {
-      id: source.id,
-      revision: source.revision,
-      ownerUid: source.ownerUid,
-      accountId: cloudUser.value.uid,
-      editable:
-        source.ownerUid === cloudUser.value.uid ||
-        access.editorEmails.includes(cloudUser.value.email.toLowerCase()),
-      savedAt: source.updatedAt?.toMillis() || 0,
-    });
-    await openLocal(id);
+const open = (item) => {
+  opening.value = item.localId ? 'Preparing your saved trip…' : 'Connecting to your cloud trip…';
+  return run(async () => {
+    try {
+      if (item.localId) return await openLocal(item.localId);
+      if (await getWorkspaceCloud(item.cloudId, { legacy: true }))
+        return await router.push({ path: '/workspace', query: { cloud: item.cloudId, edit: '1' } });
+      // Keep older archived trips usable without overwriting a local trip or cloud file.
+      opening.value = 'Downloading your trip…';
+      const source = await getCloudTrip(item.cloudId);
+      const access = await getCloudAccess(item.cloudId);
+      const payload = await decodeTripArchive(await downloadCloudTrip(source));
+      const id = await restoreTripArchive(payload, { asCopy: true });
+      bindCloudTrip(id, {
+        id: source.id,
+        revision: source.revision,
+        ownerUid: source.ownerUid,
+        accountId: cloudUser.value.uid,
+        editable:
+          source.ownerUid === cloudUser.value.uid ||
+          access.editorEmails.includes(cloudUser.value.email.toLowerCase()),
+        savedAt: source.updatedAt?.toMillis() || 0,
+      });
+      await openLocal(id);
+    } finally {
+      opening.value = '';
+    }
   });
+};
 const finishNew = async (id) => {
   selectedTripId.value = id;
   await prepareWorkspace(id);
@@ -384,6 +393,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="trip-library-page">
+    <WorkspaceLoading v-if="opening" :message="opening" />
     <header class="library-header">
       <router-link to="/trips" class="library-brand"
         ><i aria-hidden="true" class="bi bi-feather"></i> eBird Trip Planner</router-link

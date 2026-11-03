@@ -9,7 +9,7 @@ import { chromium } from 'playwright';
 import polyline from '@mapbox/polyline';
 
 const port = 5189;
-const base = `http://127.0.0.1:${port}/eBirdTripPlanner`;
+const base = `http://127.0.0.1:${port}/ebird-trip-planner`;
 const ebdFile = {
   name: 'tiny-ebd.txt',
   mimeType: 'text/plain',
@@ -71,8 +71,6 @@ const chooseAlpha = async (page) => {
 const openNotes = async (page) => {
   if ((await page.locator('#stop-extra-details').getAttribute('open')) === null)
     await page.locator('#stop-extra-details > summary').click();
-  if ((await page.locator('#note-details').getAttribute('open')) === null)
-    await page.locator('#note-details > summary').click();
 };
 const contexts = [];
 let passed = false;
@@ -537,6 +535,23 @@ try {
     selectedTripId.value = 'workspace-test';
   });
   await page.reload();
+  const noWebgl = await ownerContext.newPage();
+  await noWebgl.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      return type === 'webgl2' || type === 'webgl' ? null : getContext.call(this, type, ...args);
+    };
+  });
+  await noWebgl.goto(`${base}/workspace`);
+  await noWebgl.getByRole('heading', { name: 'Could not open the map' }).waitFor();
+  assert.equal(
+    await noWebgl.getByRole('button', { name: 'Reload', exact: true }).isVisible(),
+    true,
+  );
+  await noWebgl.getByRole('link', { name: 'My trips', exact: true }).click();
+  await noWebgl.getByRole('heading', { name: 'Oman test', exact: true }).waitFor();
+  assert.equal((await state(noWebgl)).visits.length, 2);
+  await noWebgl.close();
   await page.getByRole('button', { name: 'Enable cloud autosave', exact: true }).click();
   await waitSaved(page);
   assert.equal(
@@ -576,6 +591,41 @@ try {
   assert.deepEqual(road.routeGeometry.coordinates[0], roadGeometry.coordinates[0]);
   assert.deepEqual(road.routeGeometry.coordinates.at(-1), roadGeometry.coordinates.at(-1));
   await waitSaved(page);
+  const marker = page.getByRole('button', { name: /Alpha stop.*drag to move/ });
+  const originalLatitude = (await state(page)).visits.find(
+    (visit) => visit.name === 'Alpha stop',
+  ).latitude;
+  await marker.press('ArrowUp');
+  await until(
+    async () =>
+      (await state(page)).visits.find((visit) => visit.name === 'Alpha stop').latitude !==
+      originalLatitude,
+    'small stop move',
+  );
+  assert.equal(
+    (await state(page)).visits.find((visit) => visit.name === 'Beta stop').routeDistanceM,
+    100000,
+  );
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await until(
+    async () =>
+      (await state(page)).visits.find((visit) => visit.name === 'Alpha stop').latitude ===
+      originalLatitude,
+    'undo small stop move',
+  );
+  await marker.press('Shift+ArrowUp');
+  await until(
+    async () =>
+      !(await state(page)).visits.find((visit) => visit.name === 'Beta stop').routeGeometry,
+    'route invalidation after moving a kilometre',
+  );
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await until(
+    async () =>
+      (await state(page)).visits.find((visit) => visit.name === 'Beta stop').routeDistanceM ===
+      100000,
+    'undo route invalidation',
+  );
   assert.equal(await page.locator('.day').count(), 1, 'days without stops are omitted');
   assert.match(await page.locator('.day').innerText(), /Mon,? 16 Feb/);
   assert.match(await page.locator('.day').innerText(), /1d3h34min driving/);

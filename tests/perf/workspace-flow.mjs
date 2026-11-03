@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 
 const port = 5191,
-  base = `http://127.0.0.1:${port}/eBirdTripPlanner`;
+  base = `http://127.0.0.1:${port}/ebird-trip-planner`;
 const env = { ...process.env, WORKSPACE_TEST: 'true' };
 const run = (args) =>
   new Promise((resolve, reject) => {

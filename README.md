@@ -1,6 +1,6 @@
 # eBird Trip Planner
 
-**v2.0.0-beta.2** is a prerelease of the new trip-centered experience. See [release notes](CHANGELOG.md) for changes, limits and setup. The previous public release remains v0.4.0 until this beta is promoted.
+**v2.0.0-beta.3** is a prerelease of the new trip-centered experience. See [release notes](CHANGELOG.md) for changes, limits and setup. The previous public release remains v0.4.0 until this beta is promoted.
 
 Plan birding trips from the eBird Basic Dataset (EBD) with an offline-friendly, browser-first workflow. The app processes EBD files locally, stores results in IndexedDB, and gives you a trip builder, a species list with detection rates, and a species map with reporting-rate heat clusters.
 

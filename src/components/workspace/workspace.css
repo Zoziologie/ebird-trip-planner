@@ -1442,15 +1442,6 @@
   border-top: 1px solid var(--line);
   padding-top: 6px;
 }
-.trip-workspace-ui #comments-panel summary {
-  cursor: pointer;
-  font-size: 12px;
-}
-.trip-workspace-ui #comments-count {
-  color: var(--muted);
-  font-size: 11px;
-  margin-left: 5px;
-}
 .trip-workspace-ui .comment-actions {
   display: flex;
   gap: 6px;
@@ -1460,22 +1451,6 @@
 .trip-workspace-ui .comment-actions button {
   padding: 3px 7px;
   font-size: 11px;
-}
-.trip-workspace-ui #comment-preview {
-  max-height: 170px;
-  overflow: auto;
-}
-.trip-workspace-ui #comment-preview article {
-  margin: 7px 0;
-  border-bottom: 1px solid var(--line);
-}
-.trip-workspace-ui #comment-preview article > .small {
-  margin-left: 8px;
-}
-.trip-workspace-ui #comment-preview p {
-  margin: 5px 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 .trip-workspace-ui .mobile #map-split {
   display: none;
