@@ -1,6 +1,6 @@
 # Working workspace: first implementation
 
-The new interface ships as **v2.0.0-beta.1**. `/eBirdTripPlanner/trips` is the library and `/eBirdTripPlanner/workspace` is the sole editor/visitor view. Historical notes below describe its development from the [initial specification](v0.5-implementation.md), whose original filename predates the v2 release naming. Local review prototypes and their personal fixtures are excluded from Git and release builds. See [release notes](../CHANGELOG.md) for the current release scope and known limitations.
+The new interface is in **v2.0.0-beta.2**. `/eBirdTripPlanner/trips` is the library and `/eBirdTripPlanner/workspace` is the sole editor/visitor view. Historical notes below describe its development from the [initial specification](v0.5-implementation.md), whose original filename predates the v2 release naming. Local review prototypes and their personal fixtures are excluded from Git and release builds. See [release notes](../CHANGELOG.md) for the current release scope and known limitations.
 
 ## Local and cloud behavior
 

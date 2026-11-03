@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.0-beta.2 — 2026-11-03
+
+- Require eBird data when creating trips and support adding it to older trips that lack a dataset.
+- Detect the trip time zone from its first scheduled stop, with an optional override that preserves entered local times.
+- Compact road geometries while retaining detailed route ends, and raise the workspace plan size limit to 900 KiB.
+- Streamline trip settings, report and list controls, and improve cloud setup and offline failure handling.
+- Expand cloud rules and browser tests, update allowed storage origins, and add a stable v2 release checklist.
+
+The beta limitations below still apply, except that new trips now require eBird data. See the [release checklist](docs/v2-release-checklist.md) for outstanding scope decisions and validation.
+
 ## 2.0.0-beta.1 — 2026-10-19
 
 First beta of the second-generation eBird Trip Planner. The previous published version is 0.4.0; it has not been renamed or retagged.
