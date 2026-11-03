@@ -1,3 +1,5 @@
+import { compactRouteGeometry } from './routeGeometry.js';
+
 // Adapt the existing trip archive to the reviewed workspace's presentation model.
 export const workspaceModel = (plan, ebd, comments = [], report = null, taxonomy = {}) => {
   const taxa = (ebd?.speciesList || []).map((t) => ({
@@ -124,7 +126,7 @@ export const workspaceModelPlan = (base, stops, routes, reportId, taxa) => {
       note: s.note,
       targetSpecies: s.targets.map((name) => codes.get(name) || name),
       routeGeometryJson: routes.get(s.id)?.geometry
-        ? JSON.stringify(routes.get(s.id).geometry)
+        ? JSON.stringify(compactRouteGeometry(routes.get(s.id).geometry))
         : '',
       routeDistanceM: routes.get(s.id)?.distance || 0,
       routeDurationS: routes.get(s.id)?.duration || 0,

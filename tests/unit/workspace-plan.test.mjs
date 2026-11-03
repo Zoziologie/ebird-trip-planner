@@ -104,5 +104,20 @@ test('dataset upload excludes the plan, personal lists and personal taxon flags 
 
 test('oversize plans fail explicitly instead of discarding route geometry or device edits', () => {
   assert.doesNotThrow(() => validatePlanSize(buildWorkspacePlan(trip, [visit])));
-  assert.throws(() => validatePlanSize({ note: 'x'.repeat(720 * 1024) }), /device edits are kept/);
+  assert.throws(
+    () => validatePlanSize({ note: 'x'.repeat(901 * 1024) }),
+    /902 KiB.*900 KiB.*device edits are kept/,
+  );
+  assert.throws(() => validatePlanSize({ note: 'é'.repeat(460 * 1024) }), /921 KiB.*900 KiB/);
+});
+
+test('dense road routes comparable to Kenya fit without changing any coordinates', () => {
+  const geometry = {
+    type: 'LineString',
+    coordinates: Array.from({ length: 33375 }, () => [36.123456, -1.123456]),
+  };
+  const plan = buildWorkspacePlan(trip, [{ ...visit, routeGeometry: geometry }]);
+  assert.ok(new TextEncoder().encode(JSON.stringify(plan)).length > 700 * 1024);
+  assert.doesNotThrow(() => validatePlanSize(plan));
+  assert.deepEqual(workspaceVisits(plan, 'other-local')[0].routeGeometry, geometry);
 });

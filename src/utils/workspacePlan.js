@@ -1,3 +1,5 @@
+import { compactRouteGeometry } from './routeGeometry.js';
+
 // Shared plans contain only itinerary content. Personal lists and EBD stay separate.
 export const buildWorkspacePlan = (trip, visits) => ({
   version: 1,
@@ -22,7 +24,9 @@ export const buildWorkspacePlan = (trip, visits) => ({
       note: visit.note || '',
       targetSpecies: [...(visit.targetSpecies || [])],
       // Firestore rejects nested coordinate arrays; keep geometry as compact JSON.
-      routeGeometryJson: visit.routeGeometry ? JSON.stringify(visit.routeGeometry) : '',
+      routeGeometryJson: visit.routeGeometry
+        ? JSON.stringify(compactRouteGeometry(visit.routeGeometry))
+        : '',
       routeDistanceM: Number(visit.routeDistanceM || 0),
       routeDurationS: Number(visit.routeDurationS || 0),
     })),
@@ -90,10 +94,11 @@ export const datasetArchive = (payload) => ({
 });
 
 export const validatePlanSize = (plan) => {
-  // Leave room under Firestore's document limit for metadata and encoding overhead.
-  if (new TextEncoder().encode(JSON.stringify(plan)).length > 700 * 1024) {
+  // Keep 124 KiB below Firestore's 1 MiB document limit for metadata and field overhead.
+  const bytes = new TextEncoder().encode(JSON.stringify(plan)).length;
+  if (bytes > 900 * 1024) {
     throw new Error(
-      "This itinerary exceeds the first workspace version's 700 KB plan limit. Your device edits are kept; export a backup from Trips.",
+      `This itinerary is ${Math.ceil(bytes / 1024)} KiB; cloud autosave supports plans up to 900 KiB. Your device edits are kept; download a backup from My trips.`,
     );
   }
 };

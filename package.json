@@ -35,6 +35,8 @@
   },
   "dependencies": {
     "@mapbox/mapbox-gl-geocoder": "^5.1.2",
+    "@mapbox/polyline": "^1.2.1",
+    "@photostructure/tz-lookup": "^11.7.0",
     "@turf/turf": "^7.3.4",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
@@ -44,6 +46,7 @@
     "jszip": "^3.10.1",
     "mapbox-gl": "^3.21.0",
     "papaparse": "^5.5.3",
+    "simplify-js": "^1.2.4",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4"
   },
