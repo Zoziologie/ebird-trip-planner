@@ -74,7 +74,7 @@ service cloud.firestore {
           && data.generation is int && data.updatedAt == request.time
           && data.plan.keys().hasOnly(['version', 'name', 'timeZone', 'reportId', 'stops'])
           && data.plan.version == 1 && data.plan.name is string && data.plan.name.size() <= 200
-          && data.plan.timeZone is string && data.plan.timeZone.size() > 0 && data.plan.reportId is string
+          && data.plan.timeZone is string && data.plan.reportId is string
           && data.plan.stops is list && data.plan.stops.size() <= 500;
       }
       allow get: if ownerId(id) || editor(id) || get(/databases/$(database)/documents/cloudTrips/$(id)).data.public == true;

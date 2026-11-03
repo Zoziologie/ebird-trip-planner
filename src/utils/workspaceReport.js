@@ -12,7 +12,7 @@ export const loadWorkspaceReport = async (
 ) => {
   const get = async (path) => {
     const response = await fetch(endpoint + path + '/' + id, { signal });
-    if (!response.ok) throw new Error(`eBird report request failed (${response.status}).`);
+    if (!response.ok) throw new Error(`eBird trip report request failed (${response.status}).`);
     return response.json();
   };
   const [taxa, raw] = await Promise.all([get('taxon-list'), get('checklists')]);

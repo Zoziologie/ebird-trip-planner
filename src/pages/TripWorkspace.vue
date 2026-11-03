@@ -1,9 +1,17 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
+import {
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  watch,
+  defineAsyncComponent,
+} from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { liveQuery } from 'dexie';
-import { db } from '../data/db';
-import { selectedTripId, trips, refreshTrips } from '../state/tripSelection';
+import { db, storeTripDataset } from '../data/db';
+import { selectedTripId, refreshTrips } from '../state/tripSelection';
 import { selectedVisitId } from '../state/visitSelection';
 import {
   cloudConfigured,
@@ -25,11 +33,13 @@ import {
   setCloudSharing,
   recordCloudActivity,
 } from '../utils/firebaseCloud';
-import { readTripArchive, restoreTripArchive } from '../utils/tripData';
-import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
+import { restoreTripArchive } from '../utils/tripData';
+import { decodeTripArchive } from '../utils/tripArchive';
 import TripWorkspaceView from '../components/TripWorkspaceView.vue';
 import { taxonomyByCode } from '../utils/taxonomy';
 import { workspaceModel } from '../utils/workspaceModel';
+import { tripTimeZone } from '../utils/tripTimeZone';
+const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
 const model = shallowRef(null);
 let writes = Promise.resolve();
@@ -56,6 +66,15 @@ const savePlan = (plan) => {
   });
 };
 const saveReport = (report) => db.workspaceReports.put(report);
+const addDataset = async (payload, onProgress) => {
+  const tripId = selectedTripId.value;
+  await db.transaction('rw', db.trips, db.ebd, db.checklists, db.comments, async () => {
+    await storeTripDataset(tripId, payload);
+    await db.trips.update(tripId, { updatedAt: Date.now() });
+  });
+  onProgress(1, 1, 'save steps');
+  await loadModel(await readWorkspacePlan(tripId), tripId);
+};
 const saveLists = async (kind, taxa) => {
   const tripId = selectedTripId.value;
   const field = kind === 'life' ? 'liferWorld' : 'liferRegion';
@@ -86,9 +105,14 @@ const publicLink = ref('');
 const name = ref('');
 const timeZone = ref('');
 const timeZones = Intl.supportedValuesOf('timeZone');
+const detectedTimeZone = computed(() => {
+  const stop = localPlan.value?.stops[0];
+  return stop ? tripTimeZone('', stop.latitude, stop.longitude) : '';
+});
 let subscription;
 let sync;
 let loadId = 0;
+let initialized = false;
 const cloudId = computed(() => (typeof route.query.cloud === 'string' ? route.query.cloud : ''));
 const visitor = computed(() => Boolean(cloudId.value && route.query.edit !== '1'));
 const binding = computed(() => cloudBindings.value[selectedTripId.value]);
@@ -191,7 +215,9 @@ const attachLocal = async (tripId) => {
   await sync.flush();
   const linked = await db.workspaceSync.get(tripId);
   if (navigator.onLine && linked?.cloudId && cloudUser.value?.uid === linked.accountId)
-    await recordCloudActivity(linked.cloudId);
+    await recordCloudActivity(linked.cloudId).catch((failure) => {
+      error.value = `Trip opened from this device. Cloud connection failed: ${failure.message}`;
+    });
 };
 const load = async () => {
   const request = ++loadId;
@@ -272,7 +298,8 @@ const rename = () =>
   });
 const saveTimeZone = () =>
   run(async () => {
-    new Intl.DateTimeFormat('en', { timeZone: timeZone.value });
+    timeZone.value = timeZone.value.trim();
+    if (timeZone.value) new Intl.DateTimeFormat('en', { timeZone: timeZone.value });
     await db.trips.update(selectedTripId.value, {
       timeZone: timeZone.value,
       updatedAt: Date.now(),
@@ -285,20 +312,21 @@ const exportRecovery = (entry) =>
     }),
     `trip-recovery-${entry.id}.json`,
   );
-const exportBackup = () =>
-  run(async () => {
-    const payload = await readTripArchive(selectedTripId.value);
-    download(await encodeTripArchive(payload), tripArchiveName(payload.trip.name));
-  });
 watch(workspaceReload, async () => {
   model.value = null;
   await loadModel(await readWorkspacePlan(selectedTripId.value), selectedTripId.value);
 });
 watch(() => route.fullPath, load);
-watch(cloudUser, () => {
-  if (waitingSignIn.value || (cloudId.value && !ready.value)) load();
-  else sync?.flush();
-});
+// Handle initial auth before onMounted loads, rather than queuing a second download.
+watch(
+  () => cloudUser.value?.uid,
+  () => {
+    if (!initialized) return;
+    if (waitingSignIn.value || (cloudId.value && !ready.value)) load();
+    else sync?.flush();
+  },
+  { flush: 'sync' },
+);
 watch(selectedTripId, (id) => {
   if (ready.value && !cloudId.value && id) run(() => attachLocal(id));
 });
@@ -315,6 +343,7 @@ onMounted(async () => {
         });
       });
   }
+  initialized = true;
   await load();
 });
 onBeforeUnmount(() => {
@@ -342,6 +371,19 @@ onBeforeUnmount(() => {
         visitor
         :save-report="saveReport"
       />
+      <section
+        v-else-if="selectedTripId && localPlan && model && !model.ebdLocations.length"
+        class="p-4 overflow-auto"
+      >
+        <router-link to="/trips">My trips</router-link>
+        <h1>{{ localPlan.name }}</h1>
+        <h2>Add eBird data to start planning</h2>
+        <p>
+          This saved trip has no EBD dataset. Load one to continue; existing stops and notes are
+          kept.
+        </p>
+        <Initiate :create-trip="addDataset" submit-label="Add eBird data" />
+      </section>
       <template v-else-if="selectedTripId && localPlan && model">
         <div v-if="recoveries.length" class="alert alert-warning m-2 py-2" role="status">
           Device edits were preserved in {{ recoveries.length }} recovery
@@ -370,13 +412,7 @@ onBeforeUnmount(() => {
               ><i class="bi bi-grid" aria-hidden="true"></i></router-link
           ></template>
           <template #trip>
-            <select
-              v-model="selectedTripId"
-              aria-label="Workspace trip"
-              :disabled="Boolean(cloudId) || busy"
-            >
-              <option v-for="trip in trips" :key="trip.id" :value="trip.id">{{ trip.name }}</option>
-            </select>
+            <strong>{{ localPlan.name }}</strong>
           </template>
           <template #trip-options>
             <div class="trip-metadata">
@@ -390,24 +426,38 @@ onBeforeUnmount(() => {
                   Save
                 </button>
               </div>
-              <label for="workspace-time-zone">Trip time zone</label>
-              <div class="settings-input-action">
-                <input
-                  id="workspace-time-zone"
-                  v-model="timeZone"
-                  list="workspace-time-zones"
-                  placeholder="Asia/Muscat"
-                /><button :disabled="busy" aria-label="Save time zone" @click="saveTimeZone">
-                  Save
-                </button>
-              </div>
-              <datalist id="workspace-time-zones">
-                <option v-for="zone in timeZones" :key="zone" :value="zone" />
-              </datalist>
-              <div class="settings-links">
-                <button :disabled="busy" @click="exportBackup">Download trip backup</button
-                ><router-link to="/trips">My trips · create, import & backups</router-link>
-              </div>
+              <details>
+                <summary>Advanced · time zone</summary>
+                <p class="small">
+                  Enter all stop times in local time at the destination. The trip clock uses the
+                  first scheduled stop's time zone. Changing it keeps your entered times unchanged.
+                </p>
+                <p class="small">
+                  {{
+                    detectedTimeZone
+                      ? `Detected: ${detectedTimeZone.replaceAll('_', ' ')}`
+                      : 'Detected when you add the first stop.'
+                  }}
+                </p>
+                <label for="workspace-time-zone">Time zone override (optional)</label>
+                <div class="settings-input-action">
+                  <input
+                    id="workspace-time-zone"
+                    v-model="timeZone"
+                    list="workspace-time-zones"
+                    placeholder="Automatic from first stop"
+                  /><button :disabled="busy" aria-label="Save time zone" @click="saveTimeZone">
+                    Save
+                  </button>
+                </div>
+                <datalist id="workspace-time-zones">
+                  <option v-for="zone in timeZones" :key="zone" :value="zone" />
+                </datalist>
+                <p class="small">
+                  Leave blank and save to use automatic detection. Trips crossing time zones
+                  currently use one trip clock.
+                </p>
+              </details>
             </div>
           </template>
           <template #actions>

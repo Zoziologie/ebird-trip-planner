@@ -12,6 +12,9 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 
 import { workspaceSpatialIndex } from '../../utils/workspaceSpatial';
 import { workspaceModelPlan } from '../../utils/workspaceModel';
+import { tripTimeZone } from '../../utils/tripTimeZone';
+import polyline from '@mapbox/polyline';
+import { compactRouteGeometry } from '../../utils/routeGeometry';
 import { normalizeWorkspaceReportId, loadWorkspaceReport } from '../../utils/workspaceReport';
 
 // The reviewed workspace interaction controller, mounted and disposed by Vue.
@@ -62,8 +65,7 @@ export function mountWorkspace(root, model, options) {
     synced = data.reportChecklists.length > 0,
     clusterFeatures = [],
     busy = false;
-  let checked = new Set(),
-    collapsed = new Set();
+  const checked = new Set();
   let speciesSort = 'rank',
     speciesDirection = 1,
     lastDetailStop = 0;
@@ -95,11 +97,12 @@ export function mountWorkspace(root, model, options) {
     return today < data.start ? 'before' : today > data.end ? 'after' : 'during';
   };
   const cutoff = () => {
-    const key = Math.floor(Date.now() / 60000) + ':' + data.timeZone;
+    const zone = tripTimeZone(data.timeZone, stops[0]?.coords[1], stops[0]?.coords[0]);
+    const key = Math.floor(Date.now() / 60000) + ':' + zone;
     if (key !== clockKey) {
-      if (!clockFormatter || !clockKey.endsWith(':' + data.timeZone))
+      if (!clockFormatter || !clockKey.endsWith(':' + zone))
         clockFormatter = new Intl.DateTimeFormat('sv-SE', {
-          timeZone: data.timeZone || undefined,
+          timeZone: zone,
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',
@@ -114,6 +117,19 @@ export function mountWorkspace(root, model, options) {
   };
   const dateFormatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
   const dateLabel = (value) => dateFormatter.format(new Date(value));
+  const driveLabel = (seconds) => {
+    const minutes = Math.round(seconds / 60);
+    return [
+      Math.floor(minutes / 1440) ? Math.floor(minutes / 1440) + 'd' : '',
+      Math.floor((minutes % 1440) / 60) ? Math.floor((minutes % 1440) / 60) + 'h' : '',
+      minutes % 60 || !minutes ? (minutes % 60) + 'min' : '',
+    ].join('');
+  };
+  const dayFormatter = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
   const timeLabel = (value) => value.slice(11, 16);
   const feedback = (text) => {
     $('feedback').textContent = text;
@@ -197,12 +213,6 @@ export function mountWorkspace(root, model, options) {
   function temporal(stop) {
     return stop.date <= cutoff() ? 'past' : 'future';
   }
-  function openRelevantDay() {
-    selected = stops.find((s) => s.type === 'Birding')?.id || stops[0]?.id || 0;
-    collapsed = new Set(stops.map((s) => s.date.slice(0, 10)));
-    if (active()) collapsed.delete(active().date.slice(0, 10));
-  }
-  openRelevantDay();
   mapboxgl.accessToken = 'pk.eyJ1IjoicmFmbnVzcyIsImEiOiIzMVE1dnc0In0.3FNMKIlQ_afYktqki-6m0g';
   let mapFitted = false;
   const map = new mapboxgl.Map({
@@ -866,7 +876,6 @@ export function mountWorkspace(root, model, options) {
       selected = id;
       checked.clear();
     }
-    if (active()) collapsed.delete(active().date.slice(0, 10));
     renderList();
     renderEditor();
     renderSpecies();
@@ -888,54 +897,36 @@ export function mountWorkspace(root, model, options) {
     $('single-edit').prepend($('inline-name-row'));
     list.innerHTML = '';
     $('full-trip').setAttribute('aria-pressed', !selected);
-    const first = [data.start, ...stops.map((s) => s.date.slice(0, 10))].sort()[0],
-      last = [data.end, ...stops.map((s) => s.date.slice(0, 10))].sort().at(-1);
-    const start = new Date(first + 'T12:00'),
-      days = Math.round((new Date(last + 'T12:00') - start) / 86400000) + 1;
-    for (let dayIndex = 0; dayIndex < days; dayIndex++) {
-      const d = new Date(start);
-      d.setDate(d.getDate() + dayIndex);
-      const day = d.toISOString().slice(0, 10),
-        group = stops.filter((s) => s.date.startsWith(day));
+    for (const day of [...new Set(stops.map((s) => s.date.slice(0, 10)))].sort()) {
+      const group = stops.filter((s) => s.date.startsWith(day));
       const birding = group
           .filter((s) => s.type === 'Birding')
           .reduce((sum, s) => sum + s.duration, 0),
         legs = group.map((s) => routes.get(s.id)).filter(Boolean);
       const reportCount = reportChecklists().filter((c) => c.date.startsWith(day)).length;
-      const head = document.createElement('button');
-      head.className = 'day day-toggle';
-      head.setAttribute('aria-expanded', !collapsed.has(day));
+      const section = document.createElement('section');
+      section.className = 'day-group';
+      section.setAttribute('aria-label', dayFormatter.format(new Date(day + 'T12:00')));
+      const head = document.createElement('header');
+      head.className = 'day';
       head.innerHTML =
         '<strong>' +
-        (collapsed.has(day) ? '▸ ' : '▾ ') +
-        dateLabel(day + 'T12:00') +
+        dayFormatter.format(new Date(day + 'T12:00')) +
         '</strong><span>' +
         group.length +
-        ' stops' +
+        (group.length === 1 ? ' stop' : ' stops') +
         (writable()
           ? ' · ' +
-            birding.toFixed(1) +
-            ' h birding · ' +
-            Math.round(legs.reduce((sum, r) => sum + r.duration, 0) / 60) +
-            ' min driving'
+            Number(birding.toFixed(1)) +
+            'h birding · ' +
+            driveLabel(legs.reduce((sum, r) => sum + r.duration, 0)) +
+            ' driving'
           : reportCount
             ? ' · ' + reportCount + ' checklists'
             : '') +
         '</span>';
-      head.onclick = () => {
-        collapsed.has(day) ? collapsed.delete(day) : collapsed.add(day);
-        renderList();
-      };
-      list.append(head);
-      if (collapsed.has(day)) continue;
-      if (!group.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-day small';
-        empty.textContent = reportCount
-          ? reportCount + ' report checklists · no planned stops'
-          : 'No planned stops';
-        list.append(empty);
-      }
+      section.append(head);
+      list.append(section);
       for (const s of group) {
         const row = document.createElement('div'),
           r = routes.get(s.id);
@@ -969,7 +960,7 @@ export function mountWorkspace(root, model, options) {
               ' drive to ' +
               escape(s.name) +
               '">' +
-              (r ? '↳ ' + Math.round(r.duration / 60) + ' min' : '↳ Drive') +
+              (r ? '↳ ' + driveLabel(r.duration) : '↳ Drive') +
               '</button>'
             : '');
         const button = row.querySelector('.stop-button');
@@ -998,8 +989,8 @@ export function mountWorkspace(root, model, options) {
           button.setAttribute('aria-label', 'Select ' + s.name);
           row.insertBefore($('inline-name-row'), row.querySelector('.leg'));
         }
-        list.append(row);
-        if (s.id === selected && writable() && !checked.size) list.append($('editor'));
+        section.append(row);
+        if (s.id === selected && writable() && !checked.size) section.append($('editor'));
       }
     }
     if (!checked.size && !list.contains($('editor'))) $('editor').hidden = true;
@@ -1016,7 +1007,7 @@ export function mountWorkspace(root, model, options) {
           '</strong><p>' +
           escape(s.note) +
           '</p>' +
-          (s.targets.length
+          (s.type === 'Birding' && s.targets.length
             ? '<span class="target-star">★</span> ' + s.targets.map(escape).join(', ')
             : '')
         : '';
@@ -1487,9 +1478,6 @@ export function mountWorkspace(root, model, options) {
       dateLabel(cutoff()) +
       ' · ' +
       (stage() === 'before' ? 'plan only' : 'real report data');
-    $('report-button').textContent = reportId
-      ? 'Refresh / manage trip report'
-      : 'Connect eBird report';
     $('report-open').href = 'https://ebird.org/tripreport/' + (reportId || data.reportId);
     $('report-open').hidden = writable() || !reportId;
     $('report-layer-status').textContent =
@@ -1525,10 +1513,9 @@ export function mountWorkspace(root, model, options) {
     $('report-summary').textContent = reportId
       ? synced
         ? aggregation().lists.length + ' checklists loaded through ' + dateLabel(cutoff())
-        : 'Connected · no results loaded'
-      : 'Not connected';
-    $('connect-report').hidden = !!reportId;
-    $('sync-report').hidden = $('disconnect-report').hidden = !reportId;
+        : 'No checklists loaded'
+      : 'Add a trip report link to load checklists';
+    $('disconnect-report').hidden = !reportId;
   }
   function queueSave() {
     if (!writable()) return;
@@ -1590,7 +1577,7 @@ export function mountWorkspace(root, model, options) {
           from.coords.join(',') +
           ';' +
           stop.coords.join(',') +
-          '?overview=full&geometries=geojson&access_token=' +
+          '?overview=full&geometries=polyline6&access_token=' +
           mapboxgl.accessToken,
       );
       const data = await r.json();
@@ -1602,7 +1589,10 @@ export function mountWorkspace(root, model, options) {
         coordinates !== JSON.stringify([from.coords, stop.coords])
       )
         return;
-      routes.set(stop.id, data.routes[0]);
+      routes.set(stop.id, {
+        ...data.routes[0],
+        geometry: compactRouteGeometry(polyline.toGeoJSON(data.routes[0].geometry, 6)),
+      });
       drawLayers();
       renderList();
       queueSave();
@@ -1810,18 +1800,16 @@ export function mountWorkspace(root, model, options) {
     for (const kind of ['life', 'region']) {
       const values = [...taxa.values()].filter((t) => t[kind] !== null);
       $(kind + '-list-status').textContent = values.length
-        ? values.filter((t) => t[kind] === false).length + ' matched species seen · loaded'
-        : 'No list uploaded';
+        ? values.filter((t) => t[kind] === false).length + ' species matched'
+        : 'No list imported';
       $(kind + '-clear').disabled = !values.length;
     }
   }
   const openLists = () => {
     renderLists();
-    $('settings-dialog').close();
-    $('lists-dialog').showModal();
+    $('settings-dialog').showModal();
   };
-  $('my-lists').onclick = $('settings-lists').onclick = openLists;
-  $('lists-close').onclick = () => $('lists-dialog').close();
+  $('my-lists').onclick = openLists;
   for (const kind of ['life', 'region']) {
     $(kind + '-upload').onchange = async (e) => {
       const file = e.target.files[0],
@@ -1929,7 +1917,6 @@ export function mountWorkspace(root, model, options) {
         String(d.getHours()).padStart(2, '0') +
         ':' +
         String(d.getMinutes()).padStart(2, '0');
-      collapsed.delete(s.date.slice(0, 10));
     }
     stops.sort((a, b) => a.date.localeCompare(b.date));
     routes.clear();
@@ -1994,7 +1981,11 @@ export function mountWorkspace(root, model, options) {
         'mapbox://styles/mapbox/' + (id === 'map' ? preferences.mapStyle : 'satellite-streets-v12'),
       );
     };
-  $('settings-open').onclick = () => $('settings-dialog').showModal();
+  $('settings-open').onclick = () => {
+    renderLists();
+    renderReportSummary();
+    $('settings-dialog').showModal();
+  };
   $('settings-close').onclick = () => $('settings-dialog').close();
   $('map-style').value = preferences.mapStyle;
   $('map-style').onchange = (e) => {
@@ -2007,7 +1998,11 @@ export function mountWorkspace(root, model, options) {
     const inline = writable() && active() && !checked.size;
     for (const [id, mode] of Object.entries(preferences.fields)) {
       const field = $(id);
-      field.hidden = writable() && mode === 'hidden';
+      field.hidden =
+        (writable() && mode === 'hidden') ||
+        (active() &&
+          active().type !== 'Birding' &&
+          !['datetime-field', 'note-details'].includes(id));
       if (id === 'datetime-field' || id === 'duration-field')
         $(mode === 'detail' ? 'detail-timing' : 'default-timing').append(field);
       else if (inline)
@@ -2018,7 +2013,17 @@ export function mountWorkspace(root, model, options) {
       if ((id === 'interest-details' || id === 'note-details') && mode === 'default')
         field.open = true;
     }
-    $('selection-stats').hidden = inline || (!writable() && !aggregation(active()).lists.length);
+    $('selection-stats').hidden =
+      inline ||
+      (active() && active().type !== 'Birding') ||
+      (!writable() && !aggregation(active()).lists.length);
+    if (active() && active().type !== 'Birding') {
+      $('datetime-field').hidden = false;
+      $('default-timing').append($('datetime-field'));
+      $('stop-default-body').append($('note-details'));
+      $('note-details').hidden = false;
+      $('note-details').open = true;
+    }
     // Removing a stop is always accessible, even when every optional field is hidden.
     $('stop-extra-body').append($('remove'));
   }
@@ -2045,20 +2050,12 @@ export function mountWorkspace(root, model, options) {
       () => {
         drawLayers();
       };
-  $('report-button').onclick = () => {
-    $('settings-dialog').close();
-    renderReportSummary();
-    $('report-progress').textContent = '';
-    $('report-dialog').showModal();
-  };
-  $('close-report').onclick = () => $('report-dialog').close();
   async function syncReport() {
     if (busy) return;
     busy = true;
     reportRequest++;
-    for (const id of ['connect-report', 'sync-report', 'disconnect-report', 'report-link'])
-      $(id).disabled = true;
-    $('report-progress').textContent = 'Loading eBird report…';
+    for (const id of ['sync-report', 'disconnect-report', 'report-link']) $(id).disabled = true;
+    $('report-progress').textContent = 'Loading eBird trip report…';
     try {
       const id = normalizeWorkspaceReportId($('report-link').value);
       const report = await loadWorkspaceReport(id, {
@@ -2080,7 +2077,7 @@ export function mountWorkspace(root, model, options) {
     } finally {
       busy = false;
       if (!disposed)
-        for (const id of ['connect-report', 'sync-report', 'disconnect-report', 'report-link'])
+        for (const id of ['sync-report', 'disconnect-report', 'report-link'])
           $(id).disabled = false;
     }
   }
@@ -2123,7 +2120,7 @@ export function mountWorkspace(root, model, options) {
     drawLayers();
     drawMarkers();
   }
-  $('connect-report').onclick = $('sync-report').onclick = syncReport;
+  $('sync-report').onclick = syncReport;
   $('disconnect-report').onclick = () => {
     planningCache = null;
     selectionStatsKey = '';

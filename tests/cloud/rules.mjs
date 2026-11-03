@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { buildWorkspacePlan, validatePlanSize } from '../../src/utils/workspacePlan.js';
 import {
   initializeTestEnvironment,
   assertSucceeds,
@@ -221,7 +223,7 @@ try {
   );
   await assertSucceeds(getBytes(ref(owner.storage(), `trips/${id}/editor-save.ebirdtrip`)));
   const workspaceRef = (context) => doc(context.firestore(), 'workspaces', id);
-  const plan = { version: 1, name: 'Oman', timeZone: 'Asia/Muscat', reportId: '468402', stops: [] };
+  const plan = { version: 1, name: 'Oman', timeZone: '', reportId: '468402', stops: [] };
   const workspace = {
     datasetRevision: 'editor-save',
     revision: 'plan-1',
@@ -298,6 +300,30 @@ try {
       pending: { ...pending('revoked'), uid: 'editor' },
     }),
   );
+  const largePlan = buildWorkspacePlan({ name: 'Dense road route' }, [
+    {
+      workspaceId: 'route-stop',
+      dateTime: '2026-02-16T07:00',
+      latitude: 17,
+      longitude: 54,
+      routeGeometry: {
+        type: 'LineString',
+        coordinates: Array.from({ length: 41800 }, () => [54.123456, 17.123456]),
+      },
+    },
+  ]);
+  assert.ok(new TextEncoder().encode(JSON.stringify(largePlan)).length > 890 * 1024);
+  validatePlanSize(largePlan);
+  await assertSucceeds(
+    setDoc(workspaceRef(owner), {
+      ...workspace,
+      revision: 'large-plan',
+      commitId: 'large-plan',
+      generation: 3,
+      plan: largePlan,
+    }),
+  );
+  assert.deepEqual((await getDoc(workspaceRef(owner))).data().plan, largePlan);
   await assertSucceeds(
     updateDoc(doc(owner.firestore(), 'cloudTrips', id), {
       revision: '',

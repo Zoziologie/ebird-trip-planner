@@ -36,18 +36,24 @@ db.visits.hook('creating', (key, visit) => {
   if (!visit.workspaceId) visit.workspaceId = crypto.randomUUID();
 });
 
-export const storeTripChecklists = async (tripId, checklistsByLocation) => {
-  if (!tripId || !Array.isArray(checklistsByLocation) || !checklistsByLocation.length) return;
+// Called inside the caller's trip transaction, before opening the planner.
+export const storeTripDataset = async (tripId, payload) => {
+  if (!payload.locations.length)
+    throw new Error('No eBird locations match these filters. Adjust the filters and try again.');
+  await db.ebd.put({
+    tripId,
+    speciesList: payload.speciesList,
+    locations: payload.locations,
+    region: payload.region,
+    filters: payload.filters,
+    updatedAt: Date.now(),
+  });
   await db.checklists.bulkPut(
-    checklistsByLocation.map((entry) => ({
+    payload.checklists.map((entry) => ({
       tripId,
       localityId: String(entry.localityId),
-      checklist: entry.checklist || [],
+      checklist: entry.checklist,
     })),
   );
-};
-
-export const storeTripComments = async (tripId, entries) => {
-  if (!tripId) return;
-  await db.comments.put({ tripId, entries: entries || [] });
+  await db.comments.put({ tripId, entries: payload.comments });
 };

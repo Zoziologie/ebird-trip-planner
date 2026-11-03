@@ -6,9 +6,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { COLUMNS, makeRow } from '../unit/helpers/ebd-fixture.mjs';
 import { chromium } from 'playwright';
+import polyline from '@mapbox/polyline';
 
 const port = 5189;
 const base = `http://127.0.0.1:${port}/eBirdTripPlanner`;
+const ebdFile = {
+  name: 'tiny-ebd.txt',
+  mimeType: 'text/plain',
+  buffer: Buffer.from(
+    [COLUMNS, makeRow({ 'CHECKLIST COMMENTS': 'Library import comment' })]
+      .map((row) => row.join('\t'))
+      .join('\n'),
+  ),
+};
 const testEnv = {
   ...process.env,
   WORKSPACE_TEST: 'true',
@@ -153,24 +163,58 @@ try {
   await libraryPage.goto(`${base}/`);
   await libraryPage.getByRole('heading', { name: 'My trips', exact: true }).waitFor();
   await libraryPage.getByRole('button', { name: 'New trip', exact: true }).click();
-  await libraryPage.locator('#new-trip-name').fill('Empty library trip');
-  await libraryPage.locator('#new-trip-zone').fill('Asia/Muscat');
-  await libraryPage.getByRole('button', { name: 'Create empty trip', exact: true }).click();
+  assert.equal(await libraryPage.locator('#new-trip-name').count(), 0);
+  assert.equal(await libraryPage.locator('#new-trip-zone').count(), 0);
+  assert.equal(
+    await libraryPage.getByRole('button', { name: 'Create empty trip', exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).count(),
+    0,
+  );
+  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
+  assert.equal(
+    await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).isEnabled(),
+    false,
+  );
+  await libraryPage.locator('#new-trip-name').fill('EBD library trip');
+  await libraryPage.locator('#yearMaxFilter').fill('1900');
+  await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
+  await libraryPage.getByText(/No eBird locations match these filters/).waitFor();
+  assert.equal(await libraryPage.evaluate(async () => window.workspaceTest.db.trips.count()), 0);
+  await libraryPage.locator('#yearMaxFilter').fill('');
+  await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
   await libraryPage.getByRole('button', { name: '+ Stop', exact: true }).click();
-  await until(async () => (await state(libraryPage)).visits.length === 1, 'empty trip editing');
+  await until(async () => (await state(libraryPage)).visits.length === 1, 'EBD trip editing');
+  assert.equal((await state(libraryPage)).trip.timeZone, '');
+  await libraryPage.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const visit = (await db.visits.toArray())[0];
+    await db.visits.update(visit.id, { latitude: 17, longitude: 54, dateTime: '2026-02-16T07:00' });
+  });
+  await libraryPage.reload();
+  await libraryPage.getByRole('button', { name: 'Trip settings', exact: true }).click();
+  await libraryPage.getByText('Advanced · time zone', { exact: true }).click();
+  await libraryPage.getByText('Detected: Asia/Muscat', { exact: true }).waitFor();
+  await libraryPage.locator('#workspace-time-zone').fill('Europe/Paris');
+  await libraryPage.getByRole('button', { name: 'Save time zone', exact: true }).click();
+  await until(
+    async () => (await state(libraryPage)).trip.timeZone === 'Europe/Paris',
+    'time zone override',
+  );
+  await libraryPage.locator('#workspace-time-zone').fill('');
+  await libraryPage.getByRole('button', { name: 'Save time zone', exact: true }).click();
+  await until(
+    async () => (await state(libraryPage)).trip.timeZone === '',
+    'automatic time zone reset',
+  );
+  assert.equal((await state(libraryPage)).visits[0].dateTime, '2026-02-16T07:00');
+  await libraryPage.locator('#settings-close').click();
   await libraryPage.getByRole('link', { name: 'My trips', exact: true }).click();
   await libraryPage.getByRole('button', { name: 'New trip', exact: true }).click();
+  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
   await libraryPage.locator('#new-trip-name').fill('Raw EBD library trip');
-  await libraryPage.getByText('Add eBird data instead', { exact: true }).click();
-  await libraryPage.locator('#fileInput').setInputFiles({
-    name: 'tiny-ebd.txt',
-    mimeType: 'text/plain',
-    buffer: Buffer.from(
-      [COLUMNS, makeRow({ 'CHECKLIST COMMENTS': 'Library import comment' })]
-        .map((row) => row.join('\t'))
-        .join('\n'),
-    ),
-  });
   await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
   await libraryPage
     .getByRole('textbox', { name: 'Stop name', exact: true })
@@ -193,6 +237,16 @@ try {
   await rawCard.getByRole('button', { name: 'Download backup', exact: true }).click();
   const backupPath = await (await backupDownload).path();
   await libraryPage.getByRole('button', { name: 'Import backup', exact: true }).click();
+  await libraryPage.locator('#trip-archive-input').setInputFiles({
+    name: 'invalid.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"unrelated":true}'),
+  });
+  await libraryPage.getByRole('alert').waitFor();
+  assert.equal(
+    await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).count(),
+    0,
+  );
   await libraryPage.locator('#trip-archive-input').setInputFiles(backupPath);
   await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).click();
   await libraryPage.getByRole('link', { name: 'My trips', exact: true }).waitFor();
@@ -259,7 +313,16 @@ try {
     buffer: Buffer.from(JSON.stringify(older)),
   });
   await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).click();
+  await libraryPage
+    .getByRole('heading', { name: 'Add eBird data to start planning', exact: true })
+    .waitFor();
+  assert.equal(await libraryPage.getByRole('button', { name: '+ Stop', exact: true }).count(), 0);
+  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
+  await libraryPage.getByRole('button', { name: 'Add eBird data', exact: true }).click();
   await libraryPage.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  older.ebd = await libraryPage.evaluate(async () =>
+    window.workspaceTest.db.ebd.get(localStorage.getItem('selectedTripId')),
+  );
   const oldState = await state(libraryPage);
   assert.equal(oldState.visits[0].note, 'Keep this note');
   assert.deepEqual(oldState.visits[0].targetSpecies, ['osprey']);
@@ -287,10 +350,58 @@ try {
   console.log('Checking signed-in creation and old cloud archive migration…');
   await login(libraryPage, 'library-owner');
   await libraryPage.getByRole('button', { name: 'New trip', exact: true }).click();
+  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
   await libraryPage.locator('#new-trip-name').fill('New cloud trip');
-  await libraryPage.getByRole('button', { name: 'Create empty trip', exact: true }).click();
+  await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
   await waitSaved(libraryPage);
   assert.ok((await state(libraryPage)).sync.cloudId, 'signed-in creation enables autosave');
+  assert.equal((await state(libraryPage)).trip.timeZone, '', 'EBD trips sync in automatic mode');
+  // A full cloud allowance must leave the newly created local trip visible and explain why.
+  await libraryPage.getByRole('link', { name: 'My trips', exact: true }).click();
+  await libraryPage.getByRole('button', { name: 'New trip', exact: true }).click();
+  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
+  await libraryPage.locator('#new-trip-name').fill('Cloud quota fallback');
+  await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
+  await libraryPage
+    .getByRole('alert')
+    .filter({ hasText: 'Your cloud allowance is full' })
+    .waitFor();
+  const fallbackCard = libraryPage.locator('.trip-card').filter({
+    has: libraryPage.getByRole('heading', { name: 'Cloud quota fallback', exact: true }),
+  });
+  await fallbackCard.getByRole('button', { name: 'Open trip', exact: true }).click();
+  await libraryPage.getByRole('button', { name: '+ Stop', exact: true }).click();
+  await until(async () => (await state(libraryPage)).visits.length === 1, 'quota fallback editing');
+  assert.equal((await state(libraryPage)).sync.cloudId, '');
+  await libraryPage.getByRole('link', { name: 'My trips', exact: true }).click();
+  await libraryPage.getByRole('button', { name: 'Import backup', exact: true }).click();
+  await libraryPage.locator('#trip-archive-input').setInputFiles(backupPath);
+  await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).click();
+  await libraryPage
+    .getByRole('alert')
+    .filter({ hasText: 'Your cloud allowance is full' })
+    .waitFor();
+  assert.equal(await libraryPage.locator('dialog[open]').count(), 0);
+  // Signed-in users can also create and reopen trips entirely offline.
+  await libraryPage.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await until(
+    () => libraryPage.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+    'library offline shell',
+  );
+  await libraryContext.setOffline(true);
+  await libraryPage.getByRole('button', { name: 'New trip', exact: true }).click();
+  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
+  await libraryPage.locator('#new-trip-name').fill('Created offline');
+  await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
+  await libraryPage.getByRole('button', { name: '+ Stop', exact: true }).click();
+  await until(async () => (await state(libraryPage)).visits.length === 1, 'offline creation');
+  await libraryPage.reload();
+  await libraryPage.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  assert.equal((await state(libraryPage)).trip.name, 'Created offline');
+  assert.equal((await state(libraryPage)).sync.cloudId, '');
+  await libraryContext.setOffline(false);
   // An existing cloud archive opens intact and upgrades only through an explicit action.
   const legacyContext = await context();
   const legacyPage = legacyContext.pages()[0];
@@ -427,12 +538,77 @@ try {
   });
   await page.reload();
   await page.getByRole('button', { name: 'Enable cloud autosave', exact: true }).click();
-  await page.getByText(/Choose the trip's time zone/).waitFor();
+  await waitSaved(page);
+  assert.equal(
+    (await state(page)).sync.basePlan.timeZone,
+    '',
+    'legacy trips sync without choosing a zone',
+  );
+  const roadGeometry = {
+    type: 'LineString',
+    coordinates: Array.from({ length: 2001 }, (_, i) => [
+      Number((54.1 + i / 40000).toFixed(6)),
+      Number((17.1 + i / 40000 + Math.sin((Math.PI * i) / 2000) / 2).toFixed(6)),
+    ]),
+  };
+  await ownerContext.route('https://api.mapbox.com/directions/v5/**', async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    assert.equal(query.get('overview'), 'full');
+    assert.equal(query.get('geometries'), 'polyline6');
+    await route.fulfill({
+      json: {
+        routes: [
+          { geometry: polyline.fromGeoJSON(roadGeometry, 6), distance: 100000, duration: 99240 },
+        ],
+      },
+    });
+  });
+  await page.getByRole('button', { name: 'Compute drive to Beta stop', exact: true }).click();
+  await until(
+    async () =>
+      (await state(page)).visits.find((visit) => visit.name === 'Beta stop')?.routeDistanceM ===
+      100000,
+    'compact directions response',
+  );
+  const road = (await state(page)).visits.find((visit) => visit.name === 'Beta stop');
+  assert.equal(road.routeDurationS, 99240);
+  assert.ok(road.routeGeometry.coordinates.length < roadGeometry.coordinates.length / 2);
+  assert.deepEqual(road.routeGeometry.coordinates[0], roadGeometry.coordinates[0]);
+  assert.deepEqual(road.routeGeometry.coordinates.at(-1), roadGeometry.coordinates.at(-1));
+  await waitSaved(page);
+  assert.equal(await page.locator('.day').count(), 1, 'days without stops are omitted');
+  assert.match(await page.locator('.day').innerText(), /Mon,? 16 Feb/);
+  assert.match(await page.locator('.day').innerText(), /1d3h34min driving/);
+  assert.equal(await page.locator('.day button, button.day').count(), 0);
+  await page.locator('#datetime').fill('2026-02-18T06:00');
+  await page.locator('#datetime').dispatchEvent('change');
+  assert.equal(await page.locator('.day').count(), 2);
+  assert.equal(await page.locator('.stop-row').count(), 2);
+  assert.equal(await page.locator('.stop-row').first().isVisible(), true);
+  assert.equal(await page.locator('.stop-row').last().isVisible(), true);
+  assert.match(await page.locator('.day').last().innerText(), /Wed,? 18 Feb/);
+  await page.locator('#datetime').fill('2026-02-16T06:00');
+  await page.locator('#datetime').dispatchEvent('change');
+  assert.equal(await page.getByLabel('Workspace trip', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Trip settings', exact: true }).click();
-  await page.getByLabel('Trip time zone', { exact: true }).fill('Asia/Muscat');
-  await page.getByRole('button', { name: 'Save time zone', exact: true }).click();
+  assert.equal(await page.locator('#settings-dialog #life-upload').count(), 1);
+  assert.equal(await page.locator('#settings-dialog #region-upload').count(), 1);
+  assert.equal(await page.locator('#settings-dialog #report-link').isVisible(), true);
+  assert.equal(await page.getByText('Download trip backup', { exact: true }).count(), 0);
   await page.getByLabel('Close settings', { exact: true }).click();
-  await page.getByRole('button', { name: 'Enable cloud autosave', exact: true }).click();
+  await page.getByLabel('Stop type', { exact: true }).selectOption('Airport');
+  assert.equal(await page.locator('#datetime').isVisible(), true);
+  assert.equal(await page.locator('#note').isVisible(), true);
+  for (const field of [
+    'duration-field',
+    'interest-details',
+    'historical-stats',
+    'recorded-stats',
+    'comments-panel',
+  ])
+    assert.equal(await page.locator('#' + field).isVisible(), false, field + ' hidden for airport');
+  await page.getByLabel('Stop type', { exact: true }).selectOption('Birding');
+  assert.equal(await page.locator('#duration').isVisible(), true);
   await waitSaved(page);
   // Display choices move existing inputs without editing the shared itinerary.
   const displayPlan = (await state(page)).sync.basePlan;
@@ -524,10 +700,9 @@ try {
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   await chooseAlpha(page);
   await page.getByRole('button', { name: 'Trip settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Refresh / manage trip report', exact: true }).click();
-  await page.getByRole('button', { name: '↻ Refresh', exact: true }).click();
+  await page.locator('#sync-report').click();
   await page.locator('#report-progress').getByText('Updated', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByLabel('Close settings', { exact: true }).click();
   await openNotes(page);
   await page
     .locator('.recorded-stats')
@@ -553,11 +728,20 @@ try {
   await page.reload();
   await page.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
   assert.equal((await state(page)).visits[0].note, 'Offline field edit');
+  await page.getByRole('link', { name: 'My trips', exact: true }).click();
   await ownerContext.setOffline(false);
   await until(
     async () => (await state(page)).sync.basePlan.stops[0].note === 'Offline field edit',
     'offline reconnect sync',
   );
+  await page
+    .locator('.trip-card')
+    .filter({
+      has: page.getByRole('heading', { name: 'Oman test', exact: true }),
+    })
+    .getByRole('button', { name: 'Open trip', exact: true })
+    .click();
+  await page.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
   assert.equal(
     await page.evaluate(
       async (cloudId) => (await window.workspaceTest.getCloudTrip(cloudId)).revision,
@@ -603,10 +787,23 @@ try {
   );
   assert.equal(await visitor.getByRole('button', { name: 'Sync', exact: true }).count(), 0);
   await visitor.getByRole('button', { name: 'Trip settings', exact: true }).click();
-  assert.equal(await visitor.locator('#report-button').isVisible(), false);
+  assert.equal(await visitor.locator('#report-link').isVisible(), false);
   assert.equal(await visitor.locator('#display-note-details').isVisible(), false);
   assert.equal(await visitor.locator('#map-style').isVisible(), true);
   await visitor.getByLabel('Close settings', { exact: true }).click();
+  await visitor.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await until(
+    () => visitor.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+    'visitor offline shell',
+  );
+  await visitorContext.setOffline(true);
+  await visitor.reload();
+  await visitor.getByText('visitor view', { exact: true }).waitFor();
+  await visitor.locator('.stop-list').getByText('Alpha stop', { exact: true }).click();
+  await visitor.getByText('Offline field edit', { exact: true }).waitFor();
+  await visitorContext.setOffline(false);
   // Invited editor has a separate device and personal lists are absent in its dataset.
   const editorContext = await context();
   const editor = editorContext.pages()[0];
@@ -614,6 +811,18 @@ try {
   await login(editor, 'workspace-editor');
   await editor.goto(`${base}/workspace?cloud=${cloudId}&edit=1`);
   await editor.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  assert.equal(
+    await editor.evaluate(() => window.workspaceTest.db.trips.count()),
+    1,
+    'one shared device copy',
+  );
+  await editor.reload();
+  await editor.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  assert.equal(
+    await editor.evaluate(() => window.workspaceTest.db.trips.count()),
+    1,
+    'editing link reuses the device copy',
+  );
   assert.equal(
     await editor.evaluate(async () => {
       await window.workspaceHarnessReady;
@@ -685,6 +894,33 @@ try {
     path: 'output/playwright/workspace-visitor-mobile.png',
     fullPage: true,
   });
+  // Revocation blocks the cloud, but must not hide an existing device copy.
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  await page.getByLabel('Anyone with the link can view').uncheck();
+  await page.getByLabel('Invited editor Google emails').fill('');
+  await page.getByRole('button', { name: 'Save sharing settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await visitor.reload();
+  await visitor.getByRole('alert').waitFor();
+  assert.equal(await visitor.getByText('visitor view', { exact: true }).count(), 0);
+  await editor.goto(`${base}/trips`);
+  await editor
+    .locator('.trip-card')
+    .filter({
+      has: editor.getByRole('heading', { name: 'Oman test', exact: true }),
+    })
+    .getByRole('button', { name: 'Open trip', exact: true })
+    .click();
+  await editor.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  await chooseAlpha(editor);
+  await openNotes(editor);
+  await editor
+    .getByRole('textbox', { name: 'Stop notes', exact: true })
+    .fill('Kept after revocation');
+  await until(
+    async () => (await state(editor)).visits[0].note === 'Kept after revocation',
+    'revoked device copy remains editable',
+  );
   assert.deepEqual(errors, []);
   passed = true;
   console.log(

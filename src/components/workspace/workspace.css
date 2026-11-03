@@ -974,25 +974,6 @@
 .trip-workspace-ui .stop-text strong {
   font-size: 13px;
 }
-.trip-workspace-ui .day-toggle {
-  width: 100%;
-  text-align: left;
-  border-radius: 0;
-  position: relative;
-  padding: 8px 14px;
-  font-size: 12px;
-  line-height: 1.5;
-  cursor: pointer;
-}
-.trip-workspace-ui .day-toggle:hover {
-  background: #e1e9d9;
-}
-.trip-workspace-ui .day-toggle span {
-  font-size: 11px;
-}
-.trip-workspace-ui .empty-day {
-  padding: 12px 18px;
-}
 .trip-workspace-ui .stop-progress {
   display: none;
 }
@@ -1117,9 +1098,6 @@
 }
 .trip-workspace-ui .mobile .key-states {
   gap: 12px;
-}
-.trip-workspace-ui .mobile .day-toggle {
-  padding: 7px 10px;
 }
 .trip-workspace-ui .mobile .stop-symbol {
   width: 25px;

@@ -12,10 +12,8 @@ export const enableTripCloud = async (tripId) => {
   await prepareWorkspace(tripId);
   const plan = await readWorkspacePlan(tripId);
   validatePlanSize(plan);
-  if (!plan.timeZone)
-    throw new Error(
-      "Choose the trip's time zone in Trip settings before enabling cloud autosave. Existing stop times stay unchanged.",
-    );
+  if (!(await db.ebd.get(tripId))?.locations.length)
+    throw new Error('Load eBird data for this trip before enabling cloud autosave.');
   const binding = cloudBindings.value[tripId];
   if (binding && binding.ownerUid !== cloudUser.value.uid)
     throw new Error('Only the owner can enable autosave for an older cloud trip.');

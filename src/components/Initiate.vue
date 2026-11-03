@@ -50,7 +50,7 @@
       </div>
 
       <!-- Error message -->
-      <div v-if="hasError" class="alert alert-danger mt-3">
+      <div v-if="hasError && !saveStatus" class="alert alert-danger mt-3">
         <i class="bi bi-exclamation-triangle-fill me-2"></i>
         <strong>Processing failed!</strong>
         {{
@@ -161,6 +161,7 @@
   </div>
   <!-- Process Button -->
   <div class="row mt-3" v-if="loadedRecordCount > 0 && !isImporting">
+    <div class="col-12"><slot name="trip-details" /></div>
     <p class="text-muted">
       Select the region(s) and time range of interest. Both complete and incomplete checklists are
       kept, but reporting rates use complete checklists by default.
@@ -172,7 +173,7 @@
         :disabled="disabled || isProcessing || !canCreate"
       >
         <span v-if="isProcessing" class="spinner-border spinner-border-sm me-2"></span>
-        {{ isProcessing ? 'Creating trip…' : 'Create Trip' }}
+        {{ isProcessing ? 'Processing data…' : submitLabel }}
       </button>
     </div>
     <div class="col-auto d-flex align-items-end">
@@ -242,6 +243,7 @@ export default {
   props: {
     canCreate: { type: Boolean, default: true },
     createTrip: { type: Function, required: true },
+    submitLabel: { type: String, default: 'Create Trip' },
     disabled: {
       type: Boolean,
       default: false,

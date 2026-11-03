@@ -51,10 +51,7 @@ onBeforeUnmount(() => controller?.destroy());
             ><i class="bi bi-feather" aria-hidden="true"></i></span
           ><slot name="trip"
             ><strong>{{ plan.name }}</strong></slot
-          ><span class="visitor-only small">visitor view</span
-          ><button id="settings-open" aria-label="Trip settings" title="Trip settings">
-            <i class="bi bi-gear" aria-hidden="true"></i>
-          </button>
+          ><span class="visitor-only small">visitor view</span>
         </div>
         <nav class="segments" aria-label="Trip view">
           <button id="map-view" aria-pressed="true">Map</button
@@ -70,8 +67,14 @@ onBeforeUnmount(() => controller?.destroy());
               target="_blank"
               rel="noopener"
               hidden
-              >eBird report ↗</a
-            ><slot name="actions" /><button id="mode" class="member-only">Preview</button>
+              >eBird trip report ↗</a
+            ><slot name="actions" /><button
+              id="settings-open"
+              aria-label="Trip settings"
+              title="Trip settings"
+            >
+              <i class="bi bi-gear" aria-hidden="true"></i></button
+            ><button id="mode" class="member-only">Preview</button>
           </div>
         </details>
       </header>
@@ -313,7 +316,7 @@ onBeforeUnmount(() => controller?.destroy());
                 <h1 id="species-title"></h1>
                 <div id="species-context" class="small"></div>
               </div>
-              <button id="my-lists" class="edit-only">My lists</button
+              <button id="my-lists" class="edit-only">Life lists</button
               ><input
                 id="search-species"
                 type="search"
@@ -373,7 +376,7 @@ onBeforeUnmount(() => controller?.destroy());
             <div id="expected-summary" class="expected-summary edit-only"></div>
             <p class="small" id="report-status"></p>
             <a href="https://ebird.org/tripreports" target="_blank" rel="noopener"
-              >Open eBird reports ↗</a
+              >Open eBird trip reports ↗</a
             >
           </section>
         </main>
@@ -387,15 +390,35 @@ onBeforeUnmount(() => controller?.destroy());
         </button>
       </div>
       <section class="settings-section edit-only">
-        <h3>Trip & files</h3>
+        <h3>Trip</h3>
         <slot name="trip-options" />
       </section>
       <section class="settings-section edit-only">
         <h3>eBird</h3>
-        <div class="settings-links">
-          <button id="report-button">Connect / refresh trip report</button
-          ><button id="settings-lists">My life & region lists</button>
+        <div class="list-upload">
+          <strong>Life list</strong><span id="life-list-status" class="small"></span>
+          <label class="file-button"
+            >Import CSV<input id="life-upload" type="file" accept=".csv,text/csv" /></label
+          ><button id="life-clear">Remove</button>
         </div>
+        <div class="list-upload">
+          <strong>Region list</strong><span id="region-list-status" class="small"></span>
+          <label class="file-button"
+            >Import CSV<input id="region-upload" type="file" accept=".csv,text/csv" /></label
+          ><button id="region-clear">Remove</button>
+        </div>
+        <p id="list-feedback" role="status" class="small"></p>
+        <label for="report-link">eBird trip report</label>
+        <div class="settings-input-action">
+          <input id="report-link" placeholder="Trip report link or ID" /><button id="sync-report">
+            Sync</button
+          ><button id="disconnect-report">Remove</button>
+        </div>
+        <div id="report-summary" class="small"></div>
+        <p id="report-progress" role="status" class="small"></p>
+        <a class="small" href="https://ebird.org/mytripreports" target="_blank" rel="noopener"
+          >Find your eBird trip report ↗</a
+        >
       </section>
       <section class="settings-section">
         <h3>Map</h3>
@@ -429,42 +452,6 @@ onBeforeUnmount(() => controller?.destroy());
           </select></label
         ><button id="reset-display">Reset display preferences</button>
       </section>
-    </dialog>
-    <dialog id="lists-dialog">
-      <h2>My bird lists</h2>
-      <p class="small">Personal lists for life and region targets. Upload an eBird CSV export.</p>
-      <div class="list-upload">
-        <strong>Life list</strong><span id="life-list-status" class="small"></span
-        ><label class="file-button"
-          >Upload / replace CSV<input id="life-upload" type="file" accept=".csv,text/csv" /></label
-        ><button id="life-clear">Remove</button>
-      </div>
-      <div class="list-upload">
-        <strong>Region list</strong><span id="region-list-status" class="small"></span
-        ><label class="file-button"
-          >Upload / replace CSV<input
-            id="region-upload"
-            type="file"
-            accept=".csv,text/csv" /></label
-        ><button id="region-clear">Remove</button>
-      </div>
-      <p id="list-feedback" role="status" class="small"></p>
-      <div class="dialog-actions"><button id="lists-close" class="primary">Done</button></div>
-    </dialog>
-    <dialog id="report-dialog">
-      <h2>eBird report</h2>
-      <label for="report-link">Report link or ID</label
-      ><input id="report-link" placeholder="Report URL or ID" />
-      <div id="report-summary"></div>
-      <p id="report-progress" role="status"></p>
-      <div class="dialog-actions">
-        <button id="disconnect-report">Disconnect</button
-        ><button id="connect-report" class="primary">Connect</button
-        ><button id="sync-report">↻ Refresh</button><button id="close-report">Done</button>
-      </div>
-      <a class="small" href="https://ebird.org/mytripreports" target="_blank" rel="noopener"
-        >Create or find a report in eBird ↗</a
-      >
     </dialog>
     <dialog id="key-dialog">
       <h2>Map key</h2>

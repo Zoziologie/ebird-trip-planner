@@ -10,7 +10,7 @@ import {
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { liveQuery } from 'dexie';
-import { db, storeTripChecklists, storeTripComments } from '../data/db';
+import { db, storeTripDataset } from '../data/db';
 import { trips, selectedTripId, refreshTrips } from '../state/tripSelection';
 import {
   cloudConfigured,
@@ -42,7 +42,6 @@ import { readTripArchive, restoreTripArchive } from '../utils/tripData';
 import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
 import { uniqueTripName } from '../utils/tripNames';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
-const ebdOpen = ref(false);
 
 const router = useRouter(),
   route = useRoute();
@@ -72,7 +71,6 @@ const rows = ref([]),
   online = ref(navigator.onLine);
 const mode = ref(''),
   name = ref(''),
-  timeZone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone),
   saveOnline = ref(true);
 const importing = ref(false),
   progress = ref(''),
@@ -136,6 +134,7 @@ const run = async (action) => {
     await action();
   } catch (failure) {
     error.value = failure.message;
+    status.value = '';
   } finally {
     busy.value = false;
   }
@@ -149,7 +148,6 @@ const connection = (item) =>
       ? 'Cloud trip'
       : 'On this device';
 const start = (kind) => {
-  ebdOpen.value = false;
   mode.value = kind;
   name.value = '';
   pendingImport.value = null;
@@ -190,43 +188,36 @@ const finishNew = async (id) => {
   selectedTripId.value = id;
   await prepareWorkspace(id);
   await refreshTrips();
-  if (cloudUser.value && saveOnline.value && online.value) {
+  if (
+    cloudUser.value &&
+    saveOnline.value &&
+    online.value &&
+    (await db.ebd.get(id))?.locations.length
+  ) {
     try {
       await enableTripCloud(id);
     } catch (failure) {
       createDialog.value.close();
-      throw new Error(`Trip saved on this device. Cloud setup failed: ${failure.message}`, {
-        cause: failure,
-      });
+      error.value = `Trip saved on this device. Cloud setup failed: ${failure.message}`;
+      return;
     }
   }
   createDialog.value.close();
   await openLocal(id);
 };
-const create = async (payload = null, onProgress = () => {}) => {
+const create = async (payload, onProgress = () => {}) => {
   const id = crypto.randomUUID(),
     now = Date.now();
   await db.transaction('rw', db.trips, db.ebd, db.checklists, db.comments, async () => {
     await db.trips.put({
       id,
       name: name.value.trim(),
-      timeZone: timeZone.value,
+      timeZone: '',
       tripReportId: '',
       createdAt: now,
       updatedAt: now,
     });
-    if (payload) {
-      await db.ebd.put({
-        tripId: id,
-        speciesList: payload.speciesList,
-        locations: payload.locations,
-        region: payload.region,
-        filters: payload.filters,
-        updatedAt: now,
-      });
-      await storeTripChecklists(id, payload.checklists);
-      await storeTripComments(id, payload.comments);
-    }
+    await storeTripDataset(id, payload);
   });
   onProgress(1, 1, 'save steps');
   await finishNew(id);
@@ -243,9 +234,7 @@ const importFile = async (event) => {
         stage === 'parsing' ? 'Preparing trip…' : `Reading backup · ${Math.round(fraction * 100)}%`;
     });
     name.value = uniqueTripName(names.value, pendingImport.value.trip.name);
-    timeZone.value =
-      pendingImport.value.trip.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    progress.value = `${pendingImport.value.visits.length} stops · ${pendingImport.value.trip.tripReportId ? 'eBird report connection included' : 'Ready to import'}`;
+    progress.value = `${pendingImport.value.visits.length} stops · ${pendingImport.value.trip.tripReportId ? 'eBird trip report link included' : 'Ready to import'}`;
   } catch (failure) {
     error.value = failure.message;
   } finally {
@@ -261,7 +250,7 @@ const importBackup = () =>
         trip: {
           ...pendingImport.value.trip,
           name: name.value.trim(),
-          timeZone: timeZone.value,
+          timeZone: pendingImport.value.trip.timeZone || '',
           updatedAt: Date.now(),
         },
       },
@@ -494,7 +483,7 @@ onBeforeUnmount(() => {
           {{
             search
               ? 'Try another name.'
-              : 'Create a trip from scratch, load eBird data, or import a saved backup.'
+              : 'Load eBird data to plan a trip, or import a saved trip backup.'
           }}
         </p>
         <button v-if="!search" class="primary" @click="start('new')">Create your first trip</button>
@@ -542,10 +531,7 @@ onBeforeUnmount(() => {
     <dialog
       ref="createDialog"
       class="library-dialog"
-      @close="
-        ebdOpen = false;
-        pendingImport = null;
-      "
+      @close="pendingImport = null"
       @cancel="busy || importing ? $event.preventDefault() : null"
     >
       <div class="library-dialog-heading">
@@ -562,7 +548,7 @@ onBeforeUnmount(() => {
         {{
           mode === 'import'
             ? 'Imports create a separate trip. Existing trips are kept.'
-            : 'Start with an empty itinerary or add historical eBird data.'
+            : 'Start by loading eBird data for your destination. Every trip includes its own dataset.'
         }}
       </p>
       <p v-if="error" class="library-error" role="alert">{{ error }}</p>
@@ -577,7 +563,7 @@ onBeforeUnmount(() => {
         />
         <p role="status" class="library-muted">{{ progress }}</p></template
       >
-      <template v-if="mode !== 'import' || pendingImport"
+      <template v-if="mode === 'import' && pendingImport"
         ><label for="new-trip-name">Trip name</label
         ><input
           id="new-trip-name"
@@ -588,45 +574,38 @@ onBeforeUnmount(() => {
         <p v-if="duplicate" class="library-error">
           Choose a different name; this name is already used.
         </p>
-        <label for="new-trip-zone">Trip time zone</label
-        ><input
-          id="new-trip-zone"
-          v-model="timeZone"
-          list="library-time-zones"
-          :disabled="busy || importing"
-        /><datalist id="library-time-zones">
-          <option
-            v-for="zone in Intl.supportedValuesOf('timeZone')"
-            :key="zone"
-            :value="zone"
-          /></datalist
-        ><label v-if="cloudUser && online" class="library-check"
+        <label v-if="cloudUser && online" class="library-check"
           ><input v-model="saveOnline" type="checkbox" /> Enable cloud autosave</label
         ></template
       >
       <div v-if="mode !== 'import'" class="library-create-actions">
-        <button
-          class="primary"
-          :disabled="busy || importing || !name.trim() || duplicate || !timeZone"
-          @click="run(() => create())"
+        <Initiate
+          :disabled="busy"
+          :can-create="Boolean(name.trim() && !duplicate)"
+          :create-trip="create"
+          @busy="importing = $event"
         >
-          Create empty trip
-        </button>
-        <details @toggle="ebdOpen = $event.target.open">
-          <summary>Add eBird data instead</summary>
-          <Initiate
-            v-if="ebdOpen"
-            :disabled="busy"
-            :can-create="Boolean(name.trim() && !duplicate && timeZone)"
-            :create-trip="create"
-            @busy="importing = $event"
-          />
-        </details>
+          <template #trip-details>
+            <label for="new-trip-name">Trip name</label>
+            <input
+              id="new-trip-name"
+              v-model="name"
+              :disabled="busy || importing"
+              placeholder="e.g. Oman, February"
+            />
+            <p v-if="duplicate" class="library-error">
+              Choose a different name; this name is already used.
+            </p>
+            <label v-if="cloudUser && online" class="library-check"
+              ><input v-model="saveOnline" type="checkbox" /> Enable cloud autosave</label
+            >
+          </template>
+        </Initiate>
       </div>
       <button
         v-else-if="pendingImport"
         class="primary"
-        :disabled="busy || importing || !name.trim() || duplicate || !timeZone"
+        :disabled="busy || importing || !name.trim() || duplicate"
         @click="importBackup"
       >
         Import trip
