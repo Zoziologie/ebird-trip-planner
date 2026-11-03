@@ -1,6 +1,6 @@
 # Firebase cloud storage
 
-The app provides persistent Google sign-in and app-managed cloud trips. Browser data is the working copy; cloud saving is manual. The Trips page combines browser and cloud entries into one library, with a linked browser copy shown alongside its cloud save date. The active trip owns its save, sharing, backup and target actions. Sharing opens one dialog with separate viewing and editing links underneath their respective access settings. Unsaved access changes disable copying until the settings are saved. Create from eBird data and Import trip file are separate ways to add a trip.
+The app provides persistent Google sign-in and app-managed cloud trips. Each trip owns an EBD dataset and itinerary; there is no separate dataset library. New trips require imported EBD data, while older trips missing data require it before the planner opens. Browser data is the working copy. Signed-in creation enables cloud autosave by default: the source dataset uploads once, and itinerary edits sync as a compact workspace plan, including after reconnecting from offline use. My trips combines device and cloud entries into one library. Sharing provides separate viewing and editing links, with access controlled by the owner. Creating from eBird data and importing a saved trip backup are separate ways to add a trip.
 
 ## Project and configuration
 
@@ -24,6 +24,10 @@ Authorized login domains include `localhost`, `127.0.0.1`, the Firebase domains 
 gcloud storage buckets update gs://ebird-trip-planner.firebasestorage.app --cors-file=firebase-cors.json
 ```
 
+Browser Storage downloads require the exact origin, including the port, in that configuration. The allowed development origins include both localhost spellings on ports 5173 and 5174, preview on 4173, and both production domains. A missing origin can appear as `storage/retry-limit-exceeded` while the browser reports `MissingAllowOriginHeader`. On 19 October 2026, port 5174 and the custom production domain were added to the live bucket; downloading and opening the existing Kenya trip was verified in the signed-in browser. Emulator tests alone do not validate live CORS or Google sign-in.
+
+The paired workspace Firestore and Storage rules were also deployed and verified active on 19 October 2026. They allow automatic time zones in compact plans, restrict plan writes to authorized owners/editors, and close anonymous source-archive downloads once a trip is migrated. Existing cloud trips were not migrated or overwritten during this rollout. Uploads and workspace autosave were validated against emulators; the signed-in live-browser check covered the existing trip download.
+
 Storage rules inspect Firestore access documents. The Firebase Storage service agent requires the `roles/firebaserules.firestoreServiceAgent` role in this project.
 
 ## Free allowance and capacity requests
@@ -44,7 +48,7 @@ The client cannot edit its allowance. Default capacity is one trip if no `cloudA
 
 The app explains that free cloud storage has no guarantee of long-term retention and that trips inactive for more than six months may be deleted. Keep exported backups. Opening a trip while signed in as its owner or editor, or saving it, records `lastActiveAt`. Public anonymous views and merely listing cloud trips do not renew activity. There is no automatic six-month deletion job: the weekly report identifies candidates for an administrator to review.
 
-New revisions upload separately and are published only after completion. A transaction checks the previous revision to stop a stale browser from replacing someone else's save. Old archives are removed after a successful save. Interrupted first uploads can retry the same empty slot. Editors must reload before resolving a conflicting save; this is manual collaboration, not simultaneous editing.
+For older archive-based trips, new revisions upload separately and are published only after completion. A transaction checks the previous revision to stop a stale browser from replacing someone else's save. Old archives are removed after a successful save. Interrupted first uploads can retry the same empty slot. Workspace trips instead retain one source revision and sync plan edits separately, preserving recovery copies for conflicting device edits. See [workspace development](workspace-development.md) for the current sync behavior.
 
 Viewing links require the owner to enable public viewing. Recipients do not need accounts. Access is checked through security rules rather than permanent download-token links, so disabling public viewing blocks later downloads; already downloaded copies cannot be recalled. The editor-email list is stored separately from public trip metadata.
 
