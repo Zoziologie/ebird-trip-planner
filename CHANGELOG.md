@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Share a trip with one link that opens for editing or viewing depending on who signs in; sharing changes save immediately and private trips show a sign-in prompt.
+
 ## 2.0.0-beta.3 — 2026-11-03
 
 - Group trips by their stop dates and show date ranges on simplified library cards.

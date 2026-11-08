@@ -27,6 +27,7 @@ import { getWorkspaceCloud, workspaceUrl } from '../utils/workspaceCloud';
 import {
   initCloud,
   signInCloud,
+  signOutCloud,
   getCloudTrip,
   getCloudAccess,
   downloadCloudTrip,
@@ -100,10 +101,13 @@ const state = ref(null);
 const recoveries = ref([]);
 const recovery = ref(null);
 const sharing = ref(false);
-const isPublic = ref(false);
-const emails = ref('');
-const sharingSaved = ref(false);
-const publicLink = ref('');
+const sharePublic = ref(false);
+const shareOwnerEmail = ref('');
+const shareEditors = ref([]);
+const newEditor = ref('');
+const shareStatus = ref('');
+const shareError = ref('');
+const copied = ref(false);
 const name = ref('');
 const timeZone = ref('');
 const timeZones = Intl.supportedValuesOf('timeZone');
@@ -116,14 +120,15 @@ let sync;
 let loadId = 0;
 let initialized = false;
 const cloudId = computed(() => (typeof route.query.cloud === 'string' ? route.query.cloud : ''));
-const visitor = computed(() => Boolean(cloudId.value && route.query.edit !== '1'));
+// One link per trip: signed-in owners and invited editors edit, everyone else views if public.
+const visitor = ref(false);
+const privateTrip = ref(false);
 const binding = computed(() => cloudBindings.value[selectedTripId.value]);
 const owner = computed(
   () => binding.value?.ownerUid === cloudUser.value?.uid && Boolean(cloudUser.value),
 );
-const waitingSignIn = computed(
-  () => cloudId.value && !visitor.value && cloudReady.value && !cloudUser.value,
-);
+const shareLink = computed(() => (state.value?.cloudId ? workspaceUrl(state.value.cloudId) : ''));
+const denied = (failure) => failure?.code === 'permission-denied';
 const contentKey = computed(() => `${selectedTripId.value}:${workspaceReload.value}`);
 const download = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -155,19 +160,29 @@ const bindDataset = (tripId, trip) =>
     savedLocalEdit: 0,
     savedVisitCount: 0,
   });
+const canEdit = async (id) => {
+  if (!cloudUser.value) return false;
+  if (!navigator.onLine)
+    return (await db.workspaceSync.where('cloudId').equals(id).toArray()).some(
+      (item) => item.accountId === cloudUser.value.uid,
+    );
+  try {
+    const access = await getCloudAccess(id);
+    return (
+      access?.ownerUid === cloudUser.value.uid ||
+      Boolean(access?.editorEmails.includes(cloudUser.value.email.toLowerCase()))
+    );
+  } catch (failure) {
+    if (denied(failure)) return false;
+    throw failure;
+  }
+};
 const openSharedEditor = async (id) => {
-  loadingMessage.value = 'Checking trip access…';
   const cloud = await getWorkspaceCloud(id);
   if (!cloud)
     throw new Error(
       'This trip has not been enabled for the new workspace yet. Open it from Trips first.',
     );
-  const access = await getCloudAccess(id);
-  if (
-    access.ownerUid !== cloudUser.value.uid &&
-    !access.editorEmails.includes(cloudUser.value.email.toLowerCase())
-  )
-    throw new Error('This account does not have editing access.');
   const existing = (await db.workspaceSync.where('cloudId').equals(id).toArray()).find(
     (item) => item.accountId === cloudUser.value.uid,
   );
@@ -230,27 +245,40 @@ const load = async () => {
   ready.value = false;
   loadingMessage.value = cloudId.value ? 'Connecting to your trip…' : 'Loading your trip data…';
   error.value = '';
+  privateTrip.value = false;
   subscription?.unsubscribe();
   sync?.stop();
   try {
     if (cloudId.value && !cloudConfigured)
       throw new Error('Cloud sharing is not configured in this build.');
+    if (cloudId.value) {
+      loadingMessage.value = 'Checking trip access…';
+      const editing = await canEdit(cloudId.value);
+      if (request !== loadId) return;
+      visitor.value = !editing;
+    } else visitor.value = false;
     if (visitor.value) {
-      // Anonymous views cache only the published projection, never source archives.
+      // Viewers cache only the published projection, never source archives.
       if (navigator.onLine) {
         loadingMessage.value = 'Loading the shared trip…';
-        const cloud = await getWorkspaceCloud(cloudId.value);
-        if (!cloud) throw new Error('This workspace is unavailable.');
+        let cloud;
+        try {
+          cloud = await getWorkspaceCloud(cloudId.value);
+        } catch (failure) {
+          if (!denied(failure)) throw failure;
+          if (request === loadId) privateTrip.value = true;
+          return;
+        }
+        if (!cloud) throw new Error('This trip is unavailable.');
         visitorPlan.value = cloud.plan;
         await db.workspaceViews.put({ cloudId: cloudId.value, plan: cloud.plan });
       } else {
         visitorPlan.value = (await db.workspaceViews.get(cloudId.value))?.plan;
         if (!visitorPlan.value)
-          throw new Error('Open this visitor link online once before using it offline.');
+          throw new Error('Open this link online once before using it offline.');
       }
       await loadModel(visitorPlan.value);
     } else {
-      if (cloudId.value && !cloudUser.value) return;
       if (cloudId.value) {
         if (navigator.onLine) await openSharedEditor(cloudId.value);
         else {
@@ -272,33 +300,75 @@ const load = async () => {
 const enableCloud = () =>
   run(async () => {
     const id = await enableTripCloud(selectedTripId.value);
-    await router.push({ path: '/workspace', query: { cloud: id, edit: '1' } });
+    await router.push({ path: '/workspace', query: { cloud: id } });
   });
+const switchAccount = async () => {
+  await signOutCloud();
+  await signInCloud();
+};
+const maxEditors = 10;
 const openSharing = () =>
   run(async () => {
-    const source = await getCloudTrip(state.value.cloudId);
-    const access = await getCloudAccess(state.value.cloudId);
-    isPublic.value = source.public;
-    emails.value = access.editorEmails.join('\n');
-    sharingSaved.value = true;
-    publicLink.value = source.public ? workspaceUrl(state.value.cloudId) : '';
+    const [source, access] = await Promise.all([
+      getCloudTrip(state.value.cloudId),
+      getCloudAccess(state.value.cloudId),
+    ]);
+    sharePublic.value = source.public;
+    shareOwnerEmail.value = access.ownerEmail || cloudUser.value?.email || '';
+    shareEditors.value = access.editorEmails;
+    newEditor.value = '';
+    shareStatus.value = '';
+    shareError.value = '';
+    copied.value = false;
     sharing.value = true;
   });
-const saveSharing = () =>
-  run(async () => {
-    const editors = [
-      ...new Set(
-        emails.value
-          .split(/[\n,;]+/)
-          .map((email) => email.trim().toLowerCase())
-          .filter(Boolean),
-      ),
-    ];
-    if (editors.length > 10) throw new Error('Invite up to 10 Google accounts.');
-    await setCloudSharing(state.value.cloudId, isPublic.value, editors);
-    publicLink.value = isPublic.value ? workspaceUrl(state.value.cloudId) : '';
-    sharingSaved.value = true;
-  });
+// Every change is saved immediately, so the dialog never holds unsaved settings.
+const saveSharing = async (isPublic, editors) => {
+  busy.value = true;
+  shareError.value = '';
+  shareStatus.value = 'Saving…';
+  try {
+    await setCloudSharing(state.value.cloudId, isPublic, editors);
+    sharePublic.value = isPublic;
+    shareEditors.value = editors;
+    shareStatus.value = 'Saved';
+    return true;
+  } catch (failure) {
+    shareStatus.value = '';
+    shareError.value = failure.message;
+    return false;
+  } finally {
+    busy.value = false;
+  }
+};
+const addEditor = async () => {
+  const email = newEditor.value.trim().toLowerCase();
+  shareError.value = '';
+  if (!email) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return (shareError.value = 'Enter a full email address.');
+  if (email === shareOwnerEmail.value.toLowerCase())
+    return (shareError.value = 'You already own this trip.');
+  if (shareEditors.value.includes(email)) return (shareError.value = `${email} can already edit.`);
+  if (shareEditors.value.length >= maxEditors)
+    return (shareError.value = `You can add up to ${maxEditors} people.`);
+  if (await saveSharing(sharePublic.value, [...shareEditors.value, email])) newEditor.value = '';
+};
+const removeEditor = (email) =>
+  saveSharing(
+    sharePublic.value,
+    shareEditors.value.filter((item) => item !== email),
+  );
+const setLinkAccess = (event) => saveSharing(event.target.value === 'public', shareEditors.value);
+const copyLink = async () => {
+  try {
+    await navigator.clipboard.writeText(shareLink.value);
+    copied.value = true;
+    setTimeout(() => (copied.value = false), 2000);
+  } catch {
+    shareError.value = 'Copy failed. Select the link and copy it manually.';
+  }
+};
 const rename = () =>
   run(async () => {
     await db.trips.update(selectedTripId.value, { name: name.value, updatedAt: Date.now() });
@@ -330,7 +400,8 @@ watch(
   () => cloudUser.value?.uid,
   () => {
     if (!initialized) return;
-    if (waitingSignIn.value || (cloudId.value && !ready.value)) load();
+    // Signing in or out of a shared link can switch between viewing and editing.
+    if (cloudId.value) load();
     else sync?.flush();
   },
   { flush: 'sync' },
@@ -366,10 +437,25 @@ onBeforeUnmount(() => {
     <div v-if="error" class="alert alert-warning m-2" role="alert">
       {{ error }} <button class="btn btn-sm btn-outline-secondary" @click="load">Retry</button>
     </div>
-    <div v-if="waitingSignIn" class="p-4">
-      <p>Sign in with an invited Google account to edit this trip.</p>
-      <button class="btn btn-primary" @click="run(() => signInCloud())">Sign in with Google</button>
-    </div>
+    <section v-if="privateTrip" class="p-4" role="alert">
+      <h1 class="h5">This trip is private</h1>
+      <template v-if="cloudUser">
+        <p>
+          {{ cloudUser.email }} hasn't been added to this trip. Ask the trip owner to add this
+          Google account, or switch to the account they added.
+        </p>
+        <button class="btn btn-primary" :disabled="busy" @click="run(switchAccount)">
+          Use another Google account
+        </button>
+      </template>
+      <template v-else>
+        <p>Sign in with the Google account the trip owner added.</p>
+        <button class="btn btn-primary" :disabled="busy" @click="run(() => signInCloud())">
+          Sign in with Google
+        </button>
+      </template>
+      <router-link to="/trips" class="btn btn-link">My trips</router-link>
+    </section>
     <template v-if="ready">
       <TripWorkspaceView
         v-if="visitor && model"
@@ -378,7 +464,11 @@ onBeforeUnmount(() => {
         :initial-view="route.query.view"
         visitor
         :save-report="saveReport"
-      />
+      >
+        <template v-if="!cloudUser" #actions>
+          <button :disabled="busy" @click="run(() => signInCloud())">Sign in to edit</button>
+        </template>
+      </TripWorkspaceView>
       <section
         v-else-if="selectedTripId && localPlan && model && !model.ebdLocations.length"
         class="p-4 overflow-auto"
@@ -501,55 +591,99 @@ onBeforeUnmount(() => {
     </template>
     <WorkspaceLoading
       v-if="
-        !error &&
-        !waitingSignIn &&
-        (!ready || (selectedTripId && !visitor && (!localPlan || !model)))
+        !error && !privateTrip && (!ready || (selectedTripId && !visitor && (!localPlan || !model)))
       "
       :message="loadingMessage"
     />
     <dialog :open="sharing" class="workspace-dialog border rounded shadow" aria-label="Share trip">
       <h2 class="h5">Share trip</h2>
-      <label class="form-check"
-        ><input
-          v-model="isPublic"
-          type="checkbox"
-          class="form-check-input"
-          @change="sharingSaved = false"
+      <p class="small text-body-secondary mb-2">
+        Everyone gets the same link. People you add below can edit; everyone else can only view it,
+        and only if you allow it.
+      </p>
+      <div class="input-group">
+        <input
+          :value="shareLink"
+          readonly
+          class="form-control"
+          aria-label="Trip link"
+          @focus="$event.target.select()"
         />
-        Anyone with the link can view</label
+        <button class="btn btn-primary" @click="copyLink">
+          <i class="bi" :class="copied ? 'bi-check2' : 'bi-link-45deg'" aria-hidden="true"></i>
+          {{ copied ? 'Copied' : 'Copy link' }}
+        </button>
+      </div>
+
+      <label for="share-link-access" class="form-label fw-semibold mt-4 mb-1"
+        >Who can open the link</label
       >
-      <label for="workspace-editors" class="form-label mt-3">Invited editor Google emails</label>
-      <textarea
-        id="workspace-editors"
-        v-model="emails"
-        class="form-control"
-        rows="3"
-        @input="sharingSaved = false"
-      />
-      <button
-        class="btn btn-primary btn-sm mt-2"
-        :disabled="busy || sharingSaved"
-        @click="saveSharing"
+      <select
+        id="share-link-access"
+        class="form-select"
+        :value="sharePublic ? 'public' : 'restricted'"
+        :disabled="busy"
+        @change="setLinkAccess"
       >
-        Save sharing settings
-      </button>
-      <template v-if="sharingSaved">
-        <label v-if="publicLink" class="form-label d-block mt-3"
-          >Visitor link<input
-            :value="publicLink"
-            readonly
-            class="form-control"
-            @focus="$event.target.select()"
-        /></label>
-        <label class="form-label d-block mt-3"
-          >Editing link<input
-            :value="workspaceUrl(state.cloudId, true)"
-            readonly
-            class="form-control"
-            @focus="$event.target.select()"
-        /></label>
-      </template>
-      <button class="btn btn-outline-secondary btn-sm mt-3" @click="sharing = false">Done</button>
+        <option value="restricted">Only people added below</option>
+        <option value="public">Anyone with the link can view</option>
+      </select>
+      <p class="small text-body-secondary mt-1 mb-0">
+        {{
+          sharePublic
+            ? 'No sign-in needed to view. Viewers see the stops, notes and target species, not your eBird data.'
+            : 'Anyone else who opens the link is told the trip is private.'
+        }}
+      </p>
+
+      <h3 class="form-label fw-semibold mt-4 mb-1 fs-6">People who can edit</h3>
+      <ul class="list-group mb-2">
+        <li class="list-group-item d-flex align-items-center gap-2">
+          <span class="text-truncate flex-grow-1">{{ shareOwnerEmail }} (you)</span>
+          <span class="small text-body-secondary">Owner</span>
+        </li>
+        <li
+          v-for="email in shareEditors"
+          :key="email"
+          class="list-group-item d-flex align-items-center gap-2"
+        >
+          <span class="text-truncate flex-grow-1">{{ email }}</span>
+          <button
+            class="btn btn-sm btn-outline-danger"
+            :disabled="busy"
+            :aria-label="`Remove ${email}`"
+            @click="removeEditor(email)"
+          >
+            Remove
+          </button>
+        </li>
+      </ul>
+      <form v-if="shareEditors.length < maxEditors" class="input-group" @submit.prevent="addEditor">
+        <input
+          v-model="newEditor"
+          type="email"
+          class="form-control"
+          placeholder="name@gmail.com"
+          aria-label="Google account email"
+          autocomplete="off"
+        />
+        <button class="btn btn-outline-primary" :disabled="busy || !newEditor.trim()">Add</button>
+      </form>
+      <p class="small text-body-secondary mt-1">
+        They open the link and sign in with this Google account. No email is sent, so send them the
+        link yourself. Editors get a copy of the trip and its eBird data, but not your life lists.
+        Up to {{ maxEditors }} people.
+      </p>
+
+      <div class="d-flex align-items-center gap-2 mt-3">
+        <span v-if="shareError" class="small text-danger flex-grow-1" role="alert">{{
+          shareError
+        }}</span>
+        <span v-else class="small text-body-secondary flex-grow-1" role="status">{{
+          shareStatus
+        }}</span>
+        <button class="btn btn-outline-secondary btn-sm" @click="sharing = false">Done</button>
+      </div>
     </dialog>
     <dialog
       :open="Boolean(recovery)"

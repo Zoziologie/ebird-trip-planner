@@ -192,7 +192,7 @@ const open = (item) => {
     try {
       if (item.localId) return await openLocal(item.localId);
       if (await getWorkspaceCloud(item.cloudId, { legacy: true }))
-        return await router.push({ path: '/workspace', query: { cloud: item.cloudId, edit: '1' } });
+        return await router.push({ path: '/workspace', query: { cloud: item.cloudId } });
       // Keep older archived trips usable without overwriting a local trip or cloud file.
       opening.value = 'Downloading your trip…';
       const source = await getCloudTrip(item.cloudId);

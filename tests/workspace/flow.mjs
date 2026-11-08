@@ -831,9 +831,17 @@ try {
   assert.equal(cloudBackup.trip.tripReportId, '468402');
   // Public sharing uses only the plan; anonymous viewers never fetch an archive.
   await page.getByRole('button', { name: 'Share', exact: true }).click();
-  await page.getByLabel('Anyone with the link can view').check();
-  await page.getByLabel('Invited editor Google emails').fill('workspace-editor@example.com');
-  await page.getByRole('button', { name: 'Save sharing settings', exact: true }).click();
+  await page.getByLabel('Who can open the link').selectOption('public');
+  await page
+    .getByRole('dialog', { name: 'Share trip' })
+    .getByText('Saved', { exact: true })
+    .waitFor();
+  await page.getByLabel('Google account email').fill('workspace-editor@example.com');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove workspace-editor@example.com' }).waitFor();
+  await page
+    .getByRole('dialog', { name: 'Share trip' })
+    .screenshot({ path: 'output/playwright/workspace-share-dialog.png' });
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   const visitorContext = await context();
   const visitor = visitorContext.pages()[0];
@@ -871,7 +879,7 @@ try {
   const editor = editorContext.pages()[0];
   await editor.goto(`${base}/workspace`);
   await login(editor, 'workspace-editor');
-  await editor.goto(`${base}/workspace?cloud=${cloudId}&edit=1`);
+  await editor.goto(`${base}/workspace?cloud=${cloudId}`);
   await editor.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
   assert.equal(
     await editor.evaluate(() => window.workspaceTest.db.trips.count()),
@@ -958,9 +966,15 @@ try {
   });
   // Revocation blocks the cloud, but must not hide an existing device copy.
   await page.getByRole('button', { name: 'Share', exact: true }).click();
-  await page.getByLabel('Anyone with the link can view').uncheck();
-  await page.getByLabel('Invited editor Google emails').fill('');
-  await page.getByRole('button', { name: 'Save sharing settings', exact: true }).click();
+  await page.getByLabel('Who can open the link').selectOption('restricted');
+  await page
+    .getByRole('dialog', { name: 'Share trip' })
+    .getByText('Saved', { exact: true })
+    .waitFor();
+  await page.getByRole('button', { name: 'Remove workspace-editor@example.com' }).click();
+  await page.getByRole('button', { name: 'Remove workspace-editor@example.com' }).waitFor({
+    state: 'detached',
+  });
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await visitor.reload();
   await visitor.getByRole('alert').waitFor();

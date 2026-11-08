@@ -59,9 +59,8 @@ export const publishWorkspacePlan = async (id, baseRevision, commitId, plan) => 
   });
 };
 
-export const workspaceUrl = (id, edit = false) => {
+export const workspaceUrl = (id) => {
   const url = new URL(`${import.meta.env.BASE_URL}workspace`, window.location.origin);
   url.searchParams.set('cloud', id);
-  if (edit) url.searchParams.set('edit', '1');
   return url.href;
 };
