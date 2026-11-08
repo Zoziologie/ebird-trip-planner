@@ -1,0 +1,40 @@
+name: Validate
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/release-*']
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run check:unused
+      - run: npm test
+      - run: npm run test:workspace
+      - run: npm run perf:workspace
+        env:
+          PERF_SCALES: 1
+          PERF_INTERACTION_MS: 500
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: workspace-browser-evidence
+          path: output/playwright/

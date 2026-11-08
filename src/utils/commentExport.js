@@ -8,11 +8,14 @@
 
 const collator = new Intl.Collator(undefined);
 
-const cleanText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+const cleanText = (value) =>
+  String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const formatTime = (value) => {
-  const parts = String(value || "").split(":");
-  return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : "";
+  const parts = String(value || '').split(':');
+  return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : '';
 };
 
 export const buildCommentMarkdown = ({
@@ -21,7 +24,7 @@ export const buildCommentMarkdown = ({
   entries,
   locationsById,
   speciesNameByCode,
-  onlySpeciesCode = "",
+  onlySpeciesCode = '',
 }) => {
   const byLocality = new Map();
   let checklistCount = 0;
@@ -33,10 +36,10 @@ export const buildCommentMarkdown = ({
     );
     // A species export carries only that species' notes, so the checklist note is
     // neither shown nor counted there.
-    const checklistComment = onlySpeciesCode ? "" : cleanText(entry.checklist_comment);
+    const checklistComment = onlySpeciesCode ? '' : cleanText(entry.checklist_comment);
     if (!speciesComments.length && !checklistComment) continue;
 
-    const localityId = entry.locality_id || "";
+    const localityId = entry.locality_id || '';
     let group = byLocality.get(localityId);
     if (!group) {
       group = { localityId, checklists: [] };
@@ -49,22 +52,26 @@ export const buildCommentMarkdown = ({
 
   const groups = Array.from(byLocality.values()).map((group) => {
     const location = locationsById.get(group.localityId);
-    return { ...group, name: location?.locality || group.localityId || "Unknown location", location };
+    return {
+      ...group,
+      name: location?.locality || group.localityId || 'Unknown location',
+      location,
+    };
   });
   groups.sort((a, b) => collator.compare(a.name, b.name));
 
-  const lines = [`# ${heading}`, ""];
+  const lines = [`# ${heading}`, ''];
   for (const line of contextLines) if (line) lines.push(line);
   lines.push(
-    `${groups.length} location${groups.length === 1 ? "" : "s"} · ` +
-      `${checklistCount} checklist${checklistCount === 1 ? "" : "s"} · ` +
-      `${commentCount} comment${commentCount === 1 ? "" : "s"}`,
-    "",
+    `${groups.length} location${groups.length === 1 ? '' : 's'} · ` +
+      `${checklistCount} checklist${checklistCount === 1 ? '' : 's'} · ` +
+      `${commentCount} comment${commentCount === 1 ? '' : 's'}`,
+    '',
   );
 
   if (!groups.length) {
-    lines.push("_No comments recorded._");
-    return lines.join("\n");
+    lines.push('_No comments recorded._');
+    return lines.join('\n');
   }
 
   for (const group of groups) {
@@ -74,40 +81,38 @@ export const buildCommentMarkdown = ({
     const coords =
       named && group.location && Number.isFinite(Number(group.location.latitude))
         ? ` (${Number(group.location.latitude).toFixed(4)}, ${Number(group.location.longitude).toFixed(4)})`
-        : "";
+        : '';
     lines.push(`## ${group.name}${coords}`);
-    lines.push("");
+    lines.push('');
 
-    group.checklists.sort((a, b) =>
-      `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
-    );
+    group.checklists.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 
     for (const checklist of group.checklists) {
       const time = formatTime(checklist.time);
       const duration = Number(checklist.duration_minutes);
       const meta = [
-        [checklist.date, time].filter(Boolean).join(" "),
-        Number.isFinite(duration) && duration > 0 ? `${duration} min` : "",
-        checklist.checklist_id ? `https://ebird.org/checklist/${checklist.checklist_id}` : "",
+        [checklist.date, time].filter(Boolean).join(' '),
+        Number.isFinite(duration) && duration > 0 ? `${duration} min` : '',
+        checklist.checklist_id ? `https://ebird.org/checklist/${checklist.checklist_id}` : '',
       ].filter(Boolean);
-      lines.push(`### ${meta.join(" · ")}`);
+      lines.push(`### ${meta.join(' · ')}`);
       if (checklist.checklistComment) {
         lines.push(`Checklist note: ${checklist.checklistComment}`);
       }
       for (const [code, text] of checklist.speciesComments) {
         lines.push(`- ${speciesNameByCode.get(code) || code}: ${cleanText(text)}`);
       }
-      lines.push("");
+      lines.push('');
     }
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 };
 
 export const downloadMarkdown = (filename, text) => {
-  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+  const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
   anchor.click();

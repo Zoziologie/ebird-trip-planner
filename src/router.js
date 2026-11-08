@@ -1,27 +1,26 @@
-import { createRouter, createWebHistory } from "vue-router";
-import CreateTrip from "./pages/CreateTrip.vue";
+import { createRouter, createWebHistory } from 'vue-router';
 
-// BuildTrip and SpeciesMap pull in mapbox-gl and turf; loading them lazily keeps
-// several megabytes out of the initial bundle for users who never open a map.
+const editor = (to) => ({ path: '/workspace', query: to.query });
 const routes = [
-  { path: "/", redirect: (to) => ({ path: "/create", query: to.query }) },
-  { path: "/create", component: CreateTrip },
   {
-    path: "/buildTrip",
-    component: () => import("./pages/BuildTrip.vue"),
+    path: '/',
+    redirect: (to) => ({ path: to.query.cloud ? '/workspace' : '/trips', query: to.query }),
+  },
+  { path: '/trips', component: () => import('./pages/Trips.vue'), meta: { fullPage: true } },
+  {
+    path: '/workspace',
+    component: () => import('./pages/TripWorkspace.vue'),
     meta: { fullPage: true },
   },
-  { path: "/speciesList", component: () => import("./pages/SpeciesList.vue") },
   {
-    path: "/speciesMap",
-    component: () => import("./pages/SpeciesMap.vue"),
-    meta: { fullPage: true },
+    path: '/create',
+    redirect: (to) => ({ path: to.query.cloud ? '/workspace' : '/trips', query: to.query }),
   },
+  { path: '/buildTrip', redirect: editor },
+  {
+    path: '/speciesList',
+    redirect: (to) => ({ path: '/workspace', query: { ...to.query, view: 'species' } }),
+  },
+  { path: '/speciesMap', redirect: editor },
 ];
-
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
-});
-
-export default router;
+export default createRouter({ history: createWebHistory(import.meta.env.BASE_URL), routes });

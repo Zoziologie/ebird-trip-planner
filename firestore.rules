@@ -65,6 +65,29 @@ service cloud.firestore {
         && request.resource.data.editorEmails is list && request.resource.data.editorEmails.size() <= 10;
       allow delete: if ownerId(id) && !existsAfter(/databases/$(database)/documents/cloudTrips/$(id));
     }
+    // Compact shared plans; source archives and personal lists are never embedded.
+    match /workspaces/{id} {
+      function validWorkspace(data) {
+        return data.keys().hasOnly(['datasetRevision', 'revision', 'commitId', 'generation', 'plan', 'updatedAt'])
+          && data.datasetRevision is string && data.datasetRevision.size() > 0 && data.revision is string
+          && data.revision.matches('[a-zA-Z0-9-]{1,64}') && data.commitId == data.revision
+          && data.generation is int && data.updatedAt == request.time
+          && data.plan.keys().hasOnly(['version', 'name', 'timeZone', 'reportId', 'stops'])
+          && data.plan.version == 1 && data.plan.name is string && data.plan.name.size() <= 200
+          && data.plan.timeZone is string && data.plan.reportId is string
+          && data.plan.stops is list && data.plan.stops.size() <= 500;
+      }
+      allow get: if ownerId(id) || editor(id) || get(/databases/$(database)/documents/cloudTrips/$(id)).data.public == true;
+      allow create: if googleUser() && access(id).ownerUid == request.auth.uid
+        && validWorkspace(request.resource.data) && request.resource.data.generation == 1
+        && request.resource.data.datasetRevision == get(/databases/$(database)/documents/cloudTrips/$(id)).data.revision;
+      allow update: if editor(id) && validWorkspace(request.resource.data)
+        && request.resource.data.datasetRevision == resource.data.datasetRevision
+        && get(/databases/$(database)/documents/cloudTrips/$(id)).data.revision == resource.data.datasetRevision
+        && request.resource.data.generation == resource.data.generation + 1
+        && request.resource.data.revision != resource.data.revision;
+      allow delete: if googleUser() && access(id).ownerUid == request.auth.uid;
+    }
     match /cloudTrips/{id} {
       allow get: if ownerId(id) || resource.data.public == true || editor(id);
       allow list: if resource.data.ownerUid == request.auth.uid || editor(id);
@@ -77,11 +100,13 @@ service cloud.firestore {
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActiveAt']) && request.resource.data.lastActiveAt == request.time)
         ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pending'])
+          && !exists(/databases/$(database)/documents/workspaces/$(id))
           && validPending(request.resource.data.pending)
           && (resource.data.pending == null || resource.data.pending.expiresAt <= request.time))
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pending'])
           && request.resource.data.pending == null && resource.data.pending.uid == request.auth.uid)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'revision', 'size', 'localUpdatedAt', 'visitCount', 'updatedAt', 'lastActiveAt', 'pending'])
+          && !exists(/databases/$(database)/documents/workspaces/$(id))
           && resource.data.pending.uid == request.auth.uid && resource.data.pending.expiresAt > request.time
           && request.resource.data.revision == resource.data.pending.revision && request.resource.data.pending == null
           && request.resource.data.updatedAt == request.time && request.resource.data.lastActiveAt == request.time)

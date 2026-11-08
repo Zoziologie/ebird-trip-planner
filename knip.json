@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/components/workspace/clusterWorker.js",
+    "tests/**/*.mjs",
+    "tests/workspace/harness.js"
+  ],
+  "project": ["src/**/*.{js,vue}", "scripts/**/*.js", "tests/**/*.{js,mjs}", "*.js"]
+}

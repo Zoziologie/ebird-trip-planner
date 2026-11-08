@@ -1,6 +1,6 @@
 {
   "name": "ebirdtripplanner",
-  "version": "0.4.0",
+  "version": "2.0.0-beta.3",
   "author": "Raphaël Nussbaumer",
   "license": "GPL-3.0-or-later",
   "repository": {
@@ -9,10 +9,10 @@
   },
   "homepage": "https://github.com/Zoziologie/ebird-trip-planner",
   "bugs": {
-    "url": "https://github.com/rafnuss/ebird-trip-planner/issues"
+    "url": "https://github.com/Zoziologie/ebird-trip-planner/issues"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "type": "module",
   "scripts": {
@@ -21,16 +21,23 @@
     "preview": "vite preview",
     "download-taxo": "node scripts/download_taxonomy.js",
     "test": "node --test \"tests/unit/*.test.mjs\"",
-    "perf:standard": "node tests/perf/standard-flow.mjs",
     "perf:large-import": "node tests/perf/large-import.mjs",
-    "perf:large-flow": "node tests/perf/large-flow.mjs",
     "perf:fixture": "node tests/perf/make-ebd-fixture.mjs",
-    "test:cloud:rules": "firebase emulators:exec --project demo-ebird-trip-planner --only firestore,storage \"node tests/cloud/rules.mjs\""
+    "test:cloud:rules": "firebase emulators:exec --project demo-ebird-trip-planner --only firestore,storage \"node tests/cloud/rules.mjs\"",
+    "test:workspace": "firebase emulators:exec --project demo-ebird-trip-planner --only auth,firestore,storage \"node tests/cloud/rules.mjs && node tests/workspace/flow.mjs\"",
+    "perf:workspace": "node tests/perf/workspace-flow.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:unused": "knip",
+    "check": "npm run lint && npm run format:check && npm run check:unused && npm test"
   },
   "dependencies": {
     "@mapbox/mapbox-gl-geocoder": "^5.1.2",
+    "@mapbox/polyline": "^1.2.1",
+    "@photostructure/tz-lookup": "^11.7.0",
     "@turf/turf": "^7.3.4",
-    "@vueform/slider": "^2.1.10",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
     "bootswatch": "^5.3.8",
@@ -39,16 +46,22 @@
     "jszip": "^3.10.1",
     "mapbox-gl": "^3.21.0",
     "papaparse": "^5.5.3",
+    "simplify-js": "^1.2.4",
     "vue": "^3.5.32",
-    "vue-router": "^5.0.4",
-    "vue-select": "^4.0.0-beta.6"
+    "vue-router": "^5.0.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^5.0.2",
     "@vitejs/plugin-vue": "^6.0.5",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.11.1",
     "firebase-tools": "^14.27.0",
     "globals": "^17.4.0",
+    "knip": "^6.42.0",
     "playwright": "^1.59.1",
+    "prettier": "^3.9.10",
     "vite": "^7.3.2",
     "vite-plugin-pwa": "^1.2.0"
   },

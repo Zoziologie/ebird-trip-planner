@@ -17,10 +17,10 @@
 // to exercise the archive path the app actually uses:
 //   zip -j -q /tmp/ebd-2x.zip /tmp/ebd-2x.txt
 
-import { createWriteStream } from "node:fs";
-import { once } from "node:events";
-import { readFile } from "node:fs/promises";
-import process from "node:process";
+import { createWriteStream } from 'node:fs';
+import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 // --- Calibration: measured on ebd_MX-ROO_relJul-2026 (2,764,777 records) ------
 const REFERENCE = {
@@ -59,32 +59,75 @@ const REFERENCE = {
 // writes, which makes every row 53 fields. Column names matter - the importer
 // resolves fields by name, and "CHECKLIST COMMENTS" was "TRIP COMMENTS" here.
 const EBD_COLUMNS = [
-  "GLOBAL UNIQUE IDENTIFIER", "LAST EDITED DATE", "TAXONOMIC ORDER", "CATEGORY",
-  "TAXON CONCEPT ID", "COMMON NAME", "SCIENTIFIC NAME", "SUBSPECIES COMMON NAME",
-  "SUBSPECIES SCIENTIFIC NAME", "EXOTIC CODE", "OBSERVATION COUNT", "BREEDING CODE",
-  "BREEDING CATEGORY", "BEHAVIOR CODE", "AGE/SEX", "COUNTRY", "COUNTRY CODE", "STATE",
-  "STATE CODE", "COUNTY", "COUNTY CODE", "IBA CODE", "BCR CODE", "USFWS CODE",
-  "ATLAS BLOCK", "LOCALITY", "LOCALITY ID", "LOCALITY TYPE", "LATITUDE", "LONGITUDE",
-  "OBSERVATION DATE", "TIME OBSERVATIONS STARTED", "OBSERVER ID", "OBSERVER ORCID ID",
-  "SAMPLING EVENT IDENTIFIER", "OBSERVATION TYPE", "PROTOCOL NAME", "PROTOCOL CODE",
-  "PROJECT NAMES", "PROJECT IDENTIFIERS", "DURATION MINUTES", "EFFORT DISTANCE KM",
-  "EFFORT AREA HA", "NUMBER OBSERVERS", "ALL SPECIES REPORTED", "GROUP IDENTIFIER",
-  "HAS MEDIA", "APPROVED", "REVIEWED", "REASON", "CHECKLIST COMMENTS",
-  "SPECIES COMMENTS", "",
+  'GLOBAL UNIQUE IDENTIFIER',
+  'LAST EDITED DATE',
+  'TAXONOMIC ORDER',
+  'CATEGORY',
+  'TAXON CONCEPT ID',
+  'COMMON NAME',
+  'SCIENTIFIC NAME',
+  'SUBSPECIES COMMON NAME',
+  'SUBSPECIES SCIENTIFIC NAME',
+  'EXOTIC CODE',
+  'OBSERVATION COUNT',
+  'BREEDING CODE',
+  'BREEDING CATEGORY',
+  'BEHAVIOR CODE',
+  'AGE/SEX',
+  'COUNTRY',
+  'COUNTRY CODE',
+  'STATE',
+  'STATE CODE',
+  'COUNTY',
+  'COUNTY CODE',
+  'IBA CODE',
+  'BCR CODE',
+  'USFWS CODE',
+  'ATLAS BLOCK',
+  'LOCALITY',
+  'LOCALITY ID',
+  'LOCALITY TYPE',
+  'LATITUDE',
+  'LONGITUDE',
+  'OBSERVATION DATE',
+  'TIME OBSERVATIONS STARTED',
+  'OBSERVER ID',
+  'OBSERVER ORCID ID',
+  'SAMPLING EVENT IDENTIFIER',
+  'OBSERVATION TYPE',
+  'PROTOCOL NAME',
+  'PROTOCOL CODE',
+  'PROJECT NAMES',
+  'PROJECT IDENTIFIERS',
+  'DURATION MINUTES',
+  'EFFORT DISTANCE KM',
+  'EFFORT AREA HA',
+  'NUMBER OBSERVERS',
+  'ALL SPECIES REPORTED',
+  'GROUP IDENTIFIER',
+  'HAS MEDIA',
+  'APPROVED',
+  'REVIEWED',
+  'REASON',
+  'CHECKLIST COMMENTS',
+  'SPECIES COMMENTS',
+  '',
 ];
 const COL = Object.fromEntries(EBD_COLUMNS.map((name, index) => [name, index]));
 
 const parseArgs = () => {
-  const args = { scale: 1, out: "", seed: 42 };
+  const args = { scale: 1, out: '', seed: 42 };
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i += 1) {
-    const key = argv[i].replace(/^--/, "");
-    if (key === "scale") args.scale = Number(argv[++i]);
-    else if (key === "out") args.out = argv[++i];
-    else if (key === "seed") args.seed = Number(argv[++i]);
+    const key = argv[i].replace(/^--/, '');
+    if (key === 'scale') args.scale = Number(argv[++i]);
+    else if (key === 'out') args.out = argv[++i];
+    else if (key === 'seed') args.seed = Number(argv[++i]);
   }
   if (!args.out || !Number.isFinite(args.scale) || args.scale <= 0) {
-    console.error("Usage: node tests/perf/make-ebd-fixture.mjs --scale <n> --out <file.txt> [--seed <n>]");
+    console.error(
+      'Usage: node tests/perf/make-ebd-fixture.mjs --scale <n> --out <file.txt> [--seed <n>]',
+    );
     process.exit(1);
   }
   return args;
@@ -102,22 +145,24 @@ const makeRandom = (seed) => {
   };
 };
 
-const makeLognormal = (random, { mu, sigma, max = Infinity }) => () => {
-  // Box-Muller; one normal per draw is plenty here.
-  const u1 = Math.max(random(), 1e-12);
-  const u2 = random();
-  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  return Math.min(max, Math.max(1, Math.round(Math.exp(mu + sigma * z))));
-};
+const makeLognormal =
+  (random, { mu, sigma, max = Infinity }) =>
+  () => {
+    // Box-Muller; one normal per draw is plenty here.
+    const u1 = Math.max(random(), 1e-12);
+    const u2 = random();
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    return Math.min(max, Math.max(1, Math.round(Math.exp(mu + sigma * z))));
+  };
 
 const run = async () => {
   const { scale, out, seed } = parseArgs();
   const random = makeRandom(seed);
 
   const taxonomy = JSON.parse(
-    await readFile(new URL("../../src/assets/eBird_taxonomy.json", import.meta.url)),
+    await readFile(new URL('../../src/assets/eBird_taxonomy.json', import.meta.url)),
   );
-  const pool = taxonomy.filter((t) => t.category === "species");
+  const pool = taxonomy.filter((t) => t.category === 'species');
   const speciesPool = [];
   for (let i = 0; i < REFERENCE.distinctSpecies && i < pool.length; i += 1) {
     speciesPool.push(pool[Math.floor((i / REFERENCE.distinctSpecies) * pool.length)]);
@@ -147,13 +192,13 @@ const run = async () => {
   const drawCommentLength = makeLognormal(random, REFERENCE.commentLength);
   const drawChecklistCommentLength = makeLognormal(random, REFERENCE.checklistCommentLength);
   const COMMENT_SOURCE =
-    "Seen well in the canopy, photographed; heard calling repeatedly nearby; " +
-    "compared against reference recordings and confirmed by a second observer. ";
+    'Seen well in the canopy, photographed; heard calling repeatedly nearby; ' +
+    'compared against reference recordings and confirmed by a second observer. ';
   const CHECKLIST_COMMENT_SOURCE =
-    "Morning walk along the entrance track, light wind and broken cloud; " +
-    "access is through the gate by the km 12 marker, park on the verge. ";
+    'Morning walk along the entrance track, light wind and broken cloud; ' +
+    'access is through the gate by the km 12 marker, park on the verge. ';
   const makeText = (source, length) => {
-    let text = "";
+    let text = '';
     while (text.length < length) text += source;
     text = text.slice(0, length);
     // A real comment often opens with a quoted word. The importer must treat it
@@ -167,7 +212,7 @@ const run = async () => {
   const { bbox } = REFERENCE;
   const counties = Array.from({ length: 12 }, (_, i) => ({
     name: `County ${i + 1}`,
-    code: `MX-ROO-${String(i + 1).padStart(3, "0")}`,
+    code: `MX-ROO-${String(i + 1).padStart(3, '0')}`,
   }));
 
   const locations = [];
@@ -199,17 +244,17 @@ const run = async () => {
     totalChecklists += location.count;
   }
 
-  const stream = createWriteStream(out, { encoding: "utf8", highWaterMark: 1 << 22 });
+  const stream = createWriteStream(out, { encoding: 'utf8', highWaterMark: 1 << 22 });
   const write = async (chunk) => {
-    if (!stream.write(chunk)) await once(stream, "drain");
+    if (!stream.write(chunk)) await once(stream, 'drain');
   };
-  await write(`${EBD_COLUMNS.join("\t")}\n`);
+  await write(`${EBD_COLUMNS.join('\t')}\n`);
 
   const [minYear, maxYear] = REFERENCE.years;
   let checklistIndex = 0;
   let records = 0;
-  let buffer = "";
-  const row = new Array(EBD_COLUMNS.length).fill("");
+  let buffer = '';
+  const row = new Array(EBD_COLUMNS.length).fill('');
 
   for (const location of locations) {
     for (let c = 0; c < location.count; c += 1) {
@@ -218,12 +263,12 @@ const run = async () => {
       const year = minYear + Math.floor(random() * (maxYear - minYear + 1));
       const month = 1 + Math.floor(random() * 12);
       const day = 1 + Math.floor(random() * 28);
-      const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const time = `${String(5 + Math.floor(random() * 14)).padStart(2, "0")}:${String(Math.floor(random() * 60)).padStart(2, "0")}:00`;
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const time = `${String(5 + Math.floor(random() * 14)).padStart(2, '0')}:${String(Math.floor(random() * 60)).padStart(2, '0')}:00`;
       const duration = drawDuration();
       // Repeated on every row of the checklist, exactly as eBird exports it.
       const checklistComment =
-        random() < REFERENCE.checklistCommentRate ? makeChecklistComment() : "";
+        random() < REFERENCE.checklistCommentRate ? makeChecklistComment() : '';
 
       // Sample without replacement so a checklist never repeats a species.
       const wanted = drawSpeciesCount();
@@ -234,58 +279,59 @@ const run = async () => {
       }
 
       for (const taxon of chosen.values()) {
-        row.fill("");
-        row[COL["GLOBAL UNIQUE IDENTIFIER"]] = `URN:CornellLabOfOrnithology:EBIRD:OBS${records}`;
-        row[COL["LAST EDITED DATE"]] = `${date} 12:00:00`;
-        row[COL["TAXONOMIC ORDER"]] = String(taxon.taxonOrder ?? 0);
-        row[COL.CATEGORY] = "species";
-        row[COL["TAXON CONCEPT ID"]] = `avibase-${taxon.speciesCode}`;
-        row[COL["COMMON NAME"]] = taxon.comName || "";
-        row[COL["SCIENTIFIC NAME"]] = taxon.sciName || "";
-        row[COL["OBSERVATION COUNT"]] = random() < 0.12 ? "X" : String(1 + Math.floor(random() * 20));
-        row[COL.COUNTRY] = "Mexico";
-        row[COL["COUNTRY CODE"]] = "MX";
-        row[COL.STATE] = "Quintana Roo";
-        row[COL["STATE CODE"]] = "MX-ROO";
+        row.fill('');
+        row[COL['GLOBAL UNIQUE IDENTIFIER']] = `URN:CornellLabOfOrnithology:EBIRD:OBS${records}`;
+        row[COL['LAST EDITED DATE']] = `${date} 12:00:00`;
+        row[COL['TAXONOMIC ORDER']] = String(taxon.taxonOrder ?? 0);
+        row[COL.CATEGORY] = 'species';
+        row[COL['TAXON CONCEPT ID']] = `avibase-${taxon.speciesCode}`;
+        row[COL['COMMON NAME']] = taxon.comName || '';
+        row[COL['SCIENTIFIC NAME']] = taxon.sciName || '';
+        row[COL['OBSERVATION COUNT']] =
+          random() < 0.12 ? 'X' : String(1 + Math.floor(random() * 20));
+        row[COL.COUNTRY] = 'Mexico';
+        row[COL['COUNTRY CODE']] = 'MX';
+        row[COL.STATE] = 'Quintana Roo';
+        row[COL['STATE CODE']] = 'MX-ROO';
         row[COL.COUNTY] = location.county.name;
-        row[COL["COUNTY CODE"]] = location.county.code;
-        row[COL["BCR CODE"]] = "56";
+        row[COL['COUNTY CODE']] = location.county.code;
+        row[COL['BCR CODE']] = '56';
         row[COL.LOCALITY] = location.name;
-        row[COL["LOCALITY ID"]] = location.id;
-        row[COL["LOCALITY TYPE"]] = location.hotspot ? "H" : "P";
+        row[COL['LOCALITY ID']] = location.id;
+        row[COL['LOCALITY TYPE']] = location.hotspot ? 'H' : 'P';
         row[COL.LATITUDE] = location.lat.toFixed(7);
         row[COL.LONGITUDE] = location.lon.toFixed(7);
-        row[COL["OBSERVATION DATE"]] = date;
-        row[COL["TIME OBSERVATIONS STARTED"]] = time;
-        row[COL["OBSERVER ID"]] = `obsr${100000 + Math.floor(random() * 20000)}`;
-        row[COL["SAMPLING EVENT IDENTIFIER"]] = sampleId;
-        row[COL["OBSERVATION TYPE"]] = "Traveling";
-        row[COL["PROTOCOL CODE"]] = "P22";
-        row[COL["PROJECT NAMES"]] = "EBIRD";
-        row[COL["DURATION MINUTES"]] = String(duration);
-        row[COL["EFFORT DISTANCE KM"]] = (random() * 8).toFixed(3);
-        row[COL["NUMBER OBSERVERS"]] = String(1 + Math.floor(random() * 4));
-        row[COL["ALL SPECIES REPORTED"]] = complete ? "1" : "0";
-        row[COL["HAS MEDIA"]] = "0";
-        row[COL.APPROVED] = "1";
-        row[COL.REVIEWED] = "0";
-        row[COL["PROTOCOL NAME"]] = "Traveling";
+        row[COL['OBSERVATION DATE']] = date;
+        row[COL['TIME OBSERVATIONS STARTED']] = time;
+        row[COL['OBSERVER ID']] = `obsr${100000 + Math.floor(random() * 20000)}`;
+        row[COL['SAMPLING EVENT IDENTIFIER']] = sampleId;
+        row[COL['OBSERVATION TYPE']] = 'Traveling';
+        row[COL['PROTOCOL CODE']] = 'P22';
+        row[COL['PROJECT NAMES']] = 'EBIRD';
+        row[COL['DURATION MINUTES']] = String(duration);
+        row[COL['EFFORT DISTANCE KM']] = (random() * 8).toFixed(3);
+        row[COL['NUMBER OBSERVERS']] = String(1 + Math.floor(random() * 4));
+        row[COL['ALL SPECIES REPORTED']] = complete ? '1' : '0';
+        row[COL['HAS MEDIA']] = '0';
+        row[COL.APPROVED] = '1';
+        row[COL.REVIEWED] = '0';
+        row[COL['PROTOCOL NAME']] = 'Traveling';
         if (random() < REFERENCE.commentRate) {
-          row[COL["SPECIES COMMENTS"]] = makeComment();
+          row[COL['SPECIES COMMENTS']] = makeComment();
         }
-        if (checklistComment) row[COL["CHECKLIST COMMENTS"]] = checklistComment;
-        buffer += `${row.join("\t")}\n`;
+        if (checklistComment) row[COL['CHECKLIST COMMENTS']] = checklistComment;
+        buffer += `${row.join('\t')}\n`;
         records += 1;
       }
       if (buffer.length > 4 << 20) {
         await write(buffer);
-        buffer = "";
+        buffer = '';
       }
     }
   }
   if (buffer) await write(buffer);
   stream.end();
-  await once(stream, "finish");
+  await once(stream, 'finish');
 
   console.log(
     JSON.stringify({

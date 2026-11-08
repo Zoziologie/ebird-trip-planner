@@ -50,12 +50,12 @@
       </div>
 
       <!-- Error message -->
-      <div v-if="hasError" class="alert alert-danger mt-3">
+      <div v-if="hasError && !saveStatus" class="alert alert-danger mt-3">
         <i class="bi bi-exclamation-triangle-fill me-2"></i>
         <strong>Processing failed!</strong>
         {{
           readingFileStatus ||
-          "An error occurred while processing your file. Please check the file format and try again."
+          'An error occurred while processing your file. Please check the file format and try again.'
         }}
       </div>
     </div>
@@ -106,7 +106,7 @@
             type="number"
             id="yearMinFilter"
             v-model.number="filters.minYear"
-          :disabled="isProcessing"
+            :disabled="isProcessing"
             class="form-control form-control-sm"
             placeholder="Min"
             :min="availableYears.min"
@@ -118,7 +118,7 @@
             type="number"
             id="yearMaxFilter"
             v-model.number="filters.maxYear"
-          :disabled="isProcessing"
+            :disabled="isProcessing"
             class="form-control form-control-sm"
             placeholder="Max"
             :min="availableYears.min"
@@ -134,7 +134,7 @@
           <select
             id="monthMinFilter"
             v-model.number="filters.minMonth"
-          :disabled="isProcessing"
+            :disabled="isProcessing"
             class="form-select form-select-sm"
           >
             <option :value="null">Min</option>
@@ -147,7 +147,7 @@
           <select
             id="monthMaxFilter"
             v-model.number="filters.maxMonth"
-          :disabled="isProcessing"
+            :disabled="isProcessing"
             class="form-select form-select-sm"
           >
             <option :value="null">Max</option>
@@ -161,14 +161,19 @@
   </div>
   <!-- Process Button -->
   <div class="row mt-3" v-if="loadedRecordCount > 0 && !isImporting">
+    <div class="col-12"><slot name="trip-details" /></div>
     <p class="text-muted">
       Select the region(s) and time range of interest. Both complete and incomplete checklists are
       kept, but reporting rates use complete checklists by default.
     </p>
     <div class="col-auto d-flex align-items-center gap-3">
-      <button @click="processChecklists" class="btn btn-primary" :disabled="disabled || isProcessing || !canCreate">
+      <button
+        @click="processChecklists"
+        class="btn btn-primary"
+        :disabled="disabled || isProcessing || !canCreate"
+      >
         <span v-if="isProcessing" class="spinner-border spinner-border-sm me-2"></span>
-        {{ isProcessing ? "Creating trip…" : "Create Trip" }}
+        {{ isProcessing ? 'Processing data…' : submitLabel }}
       </button>
     </div>
     <div class="col-auto d-flex align-items-end">
@@ -179,7 +184,14 @@
   </div>
   <div class="row mt-3" v-if="saveStatus">
     <div class="col">
-      <div :class="['alert', hasError ? 'alert-danger' : isProcessing ? 'alert-info' : 'alert-success', 'py-2', 'mb-0']">
+      <div
+        :class="[
+          'alert',
+          hasError ? 'alert-danger' : isProcessing ? 'alert-info' : 'alert-success',
+          'py-2',
+          'mb-0',
+        ]"
+      >
         {{ saveStatus }}
         <template v-if="isProcessing">
           <div class="small mb-1">Step {{ processingStep }} of 5</div>
@@ -213,24 +225,25 @@
 </template>
 
 <script>
-import { nextTick, onBeforeUnmount, ref, reactive, shallowRef, watch } from "vue";
-import JSZip from "jszip";
+import { nextTick, onBeforeUnmount, ref, reactive, shallowRef, watch } from 'vue';
+import JSZip from 'jszip';
 import {
   taxonomyByScientificName as taxonomy_sci,
   taxonomyByCode as taxonomy_code,
-} from "../utils/taxonomy";
+} from '../utils/taxonomy';
 import {
   createEbdImportAccumulator,
   finalizeEbdImport,
   streamEbdZipEntry,
   streamEbdTextFile,
-} from "../utils/ebdImport";
+} from '../utils/ebdImport';
 
 export default {
-  emits: ["busy"],
+  emits: ['busy'],
   props: {
     canCreate: { type: Boolean, default: true },
     createTrip: { type: Function, required: true },
+    submitLabel: { type: String, default: 'Create Trip' },
     disabled: {
       type: Boolean,
       default: false,
@@ -242,10 +255,10 @@ export default {
 
     // File reading state
     const readingFileProgress = ref(0);
-    const readingFileStatus = ref("");
+    const readingFileStatus = ref('');
     const isImporting = ref(false);
-    const importPhase = ref("");
-    const importElapsed = ref("0:00");
+    const importPhase = ref('');
+    const importElapsed = ref('0:00');
     const hasError = ref(false);
     const loadedRecordCount = ref(0);
     const loadedChecklists = shallowRef([]);
@@ -254,33 +267,33 @@ export default {
     const isProcessing = ref(false);
     const processingProgress = ref(0);
     const processingStep = ref(1);
-    watch([isImporting, isProcessing], ([reading, creating]) => emit("busy", reading || creating));
+    watch([isImporting, isProcessing], ([reading, creating]) => emit('busy', reading || creating));
     const processingCompleted = ref(0);
     const processingTotal = ref(0);
-    const processingUnit = ref("checklists");
-    const processingElapsed = ref("0:00");
+    const processingUnit = ref('checklists');
+    const processingElapsed = ref('0:00');
     const checklists = shallowRef([]);
     const locations = shallowRef([]);
     const speciesList = shallowRef([]);
-    const saveStatus = ref("");
+    const saveStatus = ref('');
 
     const availableStates = ref([]);
     const availableCounties = ref([]);
     const availableYears = ref({ min: null, max: null });
 
     const months = [
-      { value: 1, label: "January" },
-      { value: 2, label: "February" },
-      { value: 3, label: "March" },
-      { value: 4, label: "April" },
-      { value: 5, label: "May" },
-      { value: 6, label: "June" },
-      { value: 7, label: "July" },
-      { value: 8, label: "August" },
-      { value: 9, label: "September" },
-      { value: 10, label: "October" },
-      { value: 11, label: "November" },
-      { value: 12, label: "December" },
+      { value: 1, label: 'January' },
+      { value: 2, label: 'February' },
+      { value: 3, label: 'March' },
+      { value: 4, label: 'April' },
+      { value: 5, label: 'May' },
+      { value: 6, label: 'June' },
+      { value: 7, label: 'July' },
+      { value: 8, label: 'August' },
+      { value: 9, label: 'September' },
+      { value: 10, label: 'October' },
+      { value: 11, label: 'November' },
+      { value: 12, label: 'December' },
     ];
 
     const filters = reactive({
@@ -298,12 +311,12 @@ export default {
     const formatElapsed = (milliseconds) => {
       const totalSeconds = Math.floor(milliseconds / 1000);
       const minutes = Math.floor(totalSeconds / 60);
-      return `${minutes}:${String(totalSeconds % 60).padStart(2, "0")}`;
+      return `${minutes}:${String(totalSeconds % 60).padStart(2, '0')}`;
     };
 
     const startElapsedTimer = (target) => {
       operationStartedAt = performance.now();
-      target.value = "0:00";
+      target.value = '0:00';
       elapsedTimer = window.setInterval(() => {
         target.value = formatElapsed(performance.now() - operationStartedAt);
       }, 250);
@@ -341,7 +354,7 @@ export default {
       clearLoadedResults();
       uploadedFiles.value = [];
       readingFileProgress.value = 0;
-      if (fileInput.value) fileInput.value.value = "";
+      if (fileInput.value) fileInput.value.value = '';
     };
 
     const finalizeImport = (accumulator) => {
@@ -363,12 +376,12 @@ export default {
       const files = Array.from(event.target.files || []);
       if (files.length === 0) return;
       clearLoadedResults();
-      saveStatus.value = "";
+      saveStatus.value = '';
 
       const invalidFile = files.find((file) => !/\.(txt|zip)$/i.test(file.name));
       if (invalidFile) {
-        alert("Please select only .txt or .zip files");
-        event.target.value = "";
+        alert('Please select only .txt or .zip files');
+        event.target.value = '';
         uploadedFiles.value = [];
         return;
       }
@@ -381,11 +394,11 @@ export default {
       if (uploadedFiles.value.length === 0) return;
 
       clearLoadedResults();
-      saveStatus.value = "";
+      saveStatus.value = '';
       isImporting.value = true;
-      importPhase.value = "Opening files";
+      importPhase.value = 'Opening files';
       readingFileProgress.value = 0;
-      readingFileStatus.value = "Starting file reading...";
+      readingFileStatus.value = 'Starting file reading...';
       hasError.value = false;
       startElapsedTimer(importElapsed);
 
@@ -398,31 +411,32 @@ export default {
         for (const [index, file] of files.entries()) {
           const updateProgress = (fileProgress) => {
             readingFileProgress.value =
-              ((completedBytes + Math.min(Math.max(fileProgress, 0), 1) * file.size) / totalBytes) * 100;
+              ((completedBytes + Math.min(Math.max(fileProgress, 0), 1) * file.size) / totalBytes) *
+              100;
             readingFileStatus.value =
               `Reading file ${index + 1} of ${files.length} ` +
               `(${accumulator.recordCount.toLocaleString()} non-zero records read)`;
           };
 
-          if (file.name.toLowerCase().endsWith(".txt")) {
-            importPhase.value = "Reading data";
+          if (file.name.toLowerCase().endsWith('.txt')) {
+            importPhase.value = 'Reading data';
             await streamEbdTextFile(file, accumulator, updateProgress);
             completedBytes += file.size;
             continue;
           }
 
-          importPhase.value = "Opening files";
+          importPhase.value = 'Opening files';
           readingFileStatus.value = `Opening ZIP ${index + 1} of ${files.length}...`;
           const zip = await JSZip.loadAsync(file);
           const largestTxtFile = Object.values(zip.files).reduce((largest, entry) => {
-            if (!entry.name.toLowerCase().endsWith(".txt") || !entry._data) return largest;
+            if (!entry.name.toLowerCase().endsWith('.txt') || !entry._data) return largest;
             return !largest || entry._data.uncompressedSize > largest._data.uncompressedSize
               ? entry
               : largest;
           }, null);
           if (!largestTxtFile) throw new Error(`No .txt file found in ${file.name}.`);
 
-          importPhase.value = "Reading data";
+          importPhase.value = 'Reading data';
           await streamEbdZipEntry(largestTxtFile, accumulator, (progress) => {
             updateProgress(progress / 100);
           });
@@ -430,8 +444,8 @@ export default {
         }
 
         readingFileProgress.value = 100;
-        importPhase.value = "Finalizing data";
-        readingFileStatus.value = "Finalizing data...";
+        importPhase.value = 'Finalizing data';
+        readingFileStatus.value = 'Finalizing data...';
         await nextTick();
         await new Promise((resolve) => window.requestAnimationFrame(resolve));
         finalizeImport(accumulator);
@@ -439,16 +453,16 @@ export default {
         readingFileStatus.value = `${readingFileStatus.value} Imported in ${elapsed}.`;
         isImporting.value = false;
       } catch (error) {
-        console.error("File reading error:", error);
+        console.error('File reading error:', error);
         stopElapsedTimer(importElapsed);
         isImporting.value = false;
-        importPhase.value = "";
+        importPhase.value = '';
         readingFileProgress.value = 0;
-        readingFileStatus.value = error?.message || "Error occurred while reading the files";
+        readingFileStatus.value = error?.message || 'Error occurred while reading the files';
         hasError.value = true;
         checklists.value = null;
         uploadedFiles.value = [];
-        if (fileInput.value) fileInput.value.value = "";
+        if (fileInput.value) fileInput.value.value = '';
       }
     };
 
@@ -456,7 +470,8 @@ export default {
       processingCompleted.value = completed;
       processingTotal.value = total;
       processingUnit.value = unit;
-      processingProgress.value = ((processingStep.value - 1) + (total ? completed / total : 0)) / 5 * 100;
+      processingProgress.value =
+        ((processingStep.value - 1 + (total ? completed / total : 0)) / 5) * 100;
     };
 
     const processChecklists = async () => {
@@ -466,13 +481,13 @@ export default {
       hasError.value = false;
       processingStep.value = 1;
       startElapsedTimer(processingElapsed);
-      saveStatus.value = "Filtering checklists...";
+      saveStatus.value = 'Filtering checklists...';
       locations.value = [];
       speciesList.value = [];
       const filteredChecklists = [];
       const sourceChecklists = loadedChecklists.value;
       const chunkSize = 1000;
-      updateProcessingProgress(0, sourceChecklists.length, "checklists");
+      updateProcessingProgress(0, sourceChecklists.length, 'checklists');
 
       for (let start = 0; start < sourceChecklists.length; start += chunkSize) {
         const end = Math.min(start + chunkSize, sourceChecklists.length);
@@ -500,13 +515,14 @@ export default {
 
           filteredChecklists.push(checklist);
         }
-        updateProcessingProgress(end, sourceChecklists.length, "checklists");
+        updateProcessingProgress(end, sourceChecklists.length, 'checklists');
         await yieldToBrowser();
       }
 
       checklists.value = filteredChecklists;
-      try { await processLocations(); }
-      catch (error) {
+      try {
+        await processLocations();
+      } catch (error) {
         saveStatus.value = `Trip creation failed: ${error.message}`;
         hasError.value = true;
         stopElapsedTimer(processingElapsed);
@@ -516,11 +532,11 @@ export default {
 
     const processLocations = async () => {
       processingStep.value = 2;
-      saveStatus.value = "Building locations...";
+      saveStatus.value = 'Building locations...';
       const locationMap = new Map();
       const sourceChecklists = checklists.value;
       const chunkSize = 1000;
-      updateProcessingProgress(0, sourceChecklists.length, "checklists");
+      updateProcessingProgress(0, sourceChecklists.length, 'checklists');
 
       for (let start = 0; start < sourceChecklists.length; start += chunkSize) {
         const end = Math.min(start + chunkSize, sourceChecklists.length);
@@ -535,14 +551,14 @@ export default {
               locality_id: localityId,
               latitude: Number(checklist.location.latitude),
               longitude: Number(checklist.location.longitude),
-              locality: checklist.location.locality || "",
+              locality: checklist.location.locality || '',
               locality_hotspot: checklist.location.locality_hotspot || false,
-              country: checklist.location.country || "",
-              country_code: checklist.location.country_code || "",
-              state: checklist.location.state || "",
-              state_code: checklist.location.state_code || "",
-              county: checklist.location.county || "",
-              county_code: checklist.location.county_code || "",
+              country: checklist.location.country || '',
+              country_code: checklist.location.country_code || '',
+              state: checklist.location.state || '',
+              state_code: checklist.location.state_code || '',
+              county: checklist.location.county || '',
+              county_code: checklist.location.county_code || '',
               checklist_count: 0,
               checklist_count_complete: 0,
               checklist_count_incomplete: 0,
@@ -582,7 +598,7 @@ export default {
             });
           }
         }
-        updateProcessingProgress(end, sourceChecklists.length, "checklists");
+        updateProcessingProgress(end, sourceChecklists.length, 'checklists');
         await yieldToBrowser();
       }
 
@@ -592,11 +608,11 @@ export default {
 
     const processSpecies = async () => {
       processingStep.value = 3;
-      saveStatus.value = "Building species list...";
+      saveStatus.value = 'Building species list...';
       const speciesSet = new Set();
       const sourceLocations = locations.value;
       const chunkSize = 1000;
-      updateProcessingProgress(0, sourceLocations.length, "locations");
+      updateProcessingProgress(0, sourceLocations.length, 'locations');
 
       for (let start = 0; start < sourceLocations.length; start += chunkSize) {
         const end = Math.min(start + chunkSize, sourceLocations.length);
@@ -606,7 +622,7 @@ export default {
             speciesSet.add(code);
           }
         }
-        updateProcessingProgress(end, sourceLocations.length, "locations");
+        updateProcessingProgress(end, sourceLocations.length, 'locations');
         await yieldToBrowser();
       }
 
@@ -617,13 +633,13 @@ export default {
             code: code,
             taxonOrder: taxInfo?.taxonOrder || Infinity,
             commonName: taxInfo?.comName || code,
-            scientificName: taxInfo?.sciName || "",
+            scientificName: taxInfo?.sciName || '',
           };
         })
         .sort((a, b) => a.taxonOrder - b.taxonOrder);
 
       processingStep.value = 4;
-      saveStatus.value = "Preparing trip data...";
+      saveStatus.value = 'Preparing trip data...';
       await yieldToBrowser();
       await processDone();
     };
@@ -638,7 +654,7 @@ export default {
     });
 
     const processDone = async () => {
-      const region = { code: "", name: "" };
+      const region = { code: '', name: '' };
       const uniqueStates = new Set();
       const uniqueCountries = new Set();
 
@@ -654,12 +670,12 @@ export default {
       if (uniqueStates.size === 1) {
         const stateCode = Array.from(uniqueStates)[0];
         const stateInfo = checklists.value[0]?.location;
-        region.name = stateInfo?.state || "";
+        region.name = stateInfo?.state || '';
         region.code = stateCode;
       } else if (uniqueCountries.size === 1) {
         const countryCode = Array.from(uniqueCountries)[0];
         const countryInfo = checklists.value[0]?.location;
-        region.name = countryInfo?.country || "";
+        region.name = countryInfo?.country || '';
         region.code = countryCode;
       }
 
@@ -670,7 +686,7 @@ export default {
       // which cannot be recovered from per-location medians.
       const preparedLocations = locations.value;
       const checklistsByLocation = [];
-      updateProcessingProgress(0, preparedLocations.length + checklists.value.length, "records");
+      updateProcessingProgress(0, preparedLocations.length + checklists.value.length, 'records');
       for (const [index, location] of preparedLocations.entries()) {
         location.species_checklist_counts = Array.from(location.speciesChecklistCounts.entries());
         delete location.speciesChecklistCounts;
@@ -689,7 +705,11 @@ export default {
         checklistsByLocation.push({ localityId: location.locality_id, checklist: entries });
         delete location.checklist;
         if (index % 1000 === 0) {
-          updateProcessingProgress(index + 1, preparedLocations.length + checklists.value.length, "records");
+          updateProcessingProgress(
+            index + 1,
+            preparedLocations.length + checklists.value.length,
+            'records',
+          );
           await yieldToBrowser();
         }
       }
@@ -701,17 +721,21 @@ export default {
       const commentEntries = [];
       for (const [index, checklist] of checklists.value.entries()) {
         if (index % 1000 === 0) {
-          updateProcessingProgress(preparedLocations.length + index, preparedLocations.length + checklists.value.length, "records");
+          updateProcessingProgress(
+            preparedLocations.length + index,
+            preparedLocations.length + checklists.value.length,
+            'records',
+          );
           await yieldToBrowser();
         }
         const speciesComments = checklist.species_comments || [];
-        const checklistComment = checklist.checklist_comment || "";
+        const checklistComment = checklist.checklist_comment || '';
         if (!checklistComment && !speciesComments.length) continue;
         commentEntries.push({
           checklist_id: checklist.checklist_id,
-          locality_id: checklist.location?.locality_id || "",
-          date: checklist.date || "",
-          time: checklist.time || "",
+          locality_id: checklist.location?.locality_id || '',
+          date: checklist.date || '',
+          time: checklist.time || '',
           duration_minutes: checklist.duration_minutes,
           checklist_comment: checklistComment,
           species_comments: speciesComments,
@@ -727,14 +751,14 @@ export default {
         filters: buildSerializableFilters(),
       };
       processingStep.value = 5;
-      saveStatus.value = "Saving trip in this browser…";
-      updateProcessingProgress(0, 5, "save steps");
+      saveStatus.value = 'Saving trip in this browser…';
+      updateProcessingProgress(0, 5, 'save steps');
       await yieldToBrowser();
       await props.createTrip(payload, updateProcessingProgress);
       processingProgress.value = 100;
       resetLoadedData();
-      readingFileStatus.value = "Trip created. Import data cleared from memory.";
-      saveStatus.value = "";
+      readingFileStatus.value = 'Trip created. Import data cleared from memory.';
+      saveStatus.value = '';
       stopElapsedTimer(processingElapsed);
       isProcessing.value = false;
     };

@@ -1,8 +1,11 @@
+The old `perf:standard` and `perf:large-flow` page-navigation scripts were retired with the old interface. Active browser correctness is in `tests/workspace/flow.mjs`; active editing performance is in `tests/perf/workspace-flow.mjs`. The raw EBD streaming benchmark and fixture generator remain available. Older measurements and commands below document the earlier interface and are historical.
+
 # Testing
 
 ```bash
 npm test              # correctness: EBD parsing and the comment corpus
-npm run perf:standard # fast end-to-end check on a tiny fixture
+npm run test:workspace # trip library, import/export, editor, offline and cloud correctness
+npm run perf:workspace # active editor performance with large datasets
 ```
 
 Everything below is about the second question: does it still work when the
@@ -21,11 +24,11 @@ quoted field and swallows everything up to the next `"`, anywhere later in the
 file. 58 species comments and 20 checklist comments in that one export open with
 a quote, and the damage was:
 
-| | with default quoting | unquoted (correct) |
-|---|---|---|
-| rows ingested | 2,567,955 (**7.1% lost**) | 2,764,777 |
-| stored comment text | 62 MB | 2.1 MB |
-| longest single "comment" | 14.4 MB | 2,735 chars |
+|                          | with default quoting      | unquoted (correct) |
+| ------------------------ | ------------------------- | ------------------ |
+| rows ingested            | 2,567,955 (**7.1% lost**) | 2,764,777          |
+| stored comment text      | 62 MB                     | 2.1 MB             |
+| longest single "comment" | 14.4 MB                   | 2,735 chars        |
 
 `EBD_PARSE_OPTIONS` disables `quoteChar`/`escapeChar` for this reason. The
 failure is silent - no parse error, no warning, just missing observations - so
@@ -38,15 +41,15 @@ exercises the path.
 Measured from `ebd_MX-ROO_relJul-2026`, which is the working definition of a **1x
 reference export**. A high-end single trip is **2-4x** this.
 
-| | value |
-|---|---|
-| zip on disk | 104 MB |
-| unpacked `.txt` | 1.1 GB |
-| observation rows | 2,764,777 |
-| checklists | 142,206 |
-| complete checklists (stored) | 105,244 |
-| distinct locations | 33,370 |
-| distinct species | 506 |
+|                              | value     |
+| ---------------------------- | --------- |
+| zip on disk                  | 104 MB    |
+| unpacked `.txt`              | 1.1 GB    |
+| observation rows             | 2,764,777 |
+| checklists                   | 142,206   |
+| complete checklists (stored) | 105,244   |
+| distinct locations           | 33,370    |
+| distinct species             | 506       |
 
 Shape statistics, for reasoning about a specific code path:
 
@@ -72,11 +75,11 @@ a visit as a cheap object to deep-clone or deep-watch.
 
 Three tables, because the pages have three very different appetites:
 
-| table | key | 1x size | read when |
-|---|---|---|---|
-| `ebd` | `tripId` | 18.6 MB | every page, always |
-| `checklists` | `[tripId+localityId]` | 105.3 MB (33,370 rows) | a map popup or KML export needs one location |
-| `comments` | `tripId` | 11.3 MB (35,149 entries) | someone exports comments |
+| table        | key                   | 1x size                  | read when                                    |
+| ------------ | --------------------- | ------------------------ | -------------------------------------------- |
+| `ebd`        | `tripId`              | 18.6 MB                  | every page, always                           |
+| `checklists` | `[tripId+localityId]` | 105.3 MB (33,370 rows)   | a map popup or KML export needs one location |
+| `comments`   | `tripId`              | 11.3 MB (35,149 entries) | someone exports comments                     |
 
 The split exists because checklists were ~99% of the old single record while only
 two features read them, and because a comment export keyed by species would
@@ -99,10 +102,10 @@ Two details worth knowing before touching this:
 Peak heap when opening each page, measured with `perf:large-flow` on a persistent
 profile:
 
-| | Species List | Species Map | Build Trip |
-|---|---|---|---|
-| `ebd_MX-ROO` (1x) | 84 MB | 95 MB | 155 MB |
-| scale-2 fixture | 298 MB | 337 MB | 514 MB |
+|                   | Species List | Species Map | Build Trip |
+| ----------------- | ------------ | ----------- | ---------- |
+| `ebd_MX-ROO` (1x) | 84 MB        | 95 MB       | 155 MB     |
+| scale-2 fixture   | 298 MB       | 337 MB      | 514 MB     |
 
 For reference, before checklists were split out of the `ebd` record those same
 pages cost 536 / 546 / 832 MB at 1x and 929 / 964 / 1449 MB at scale 2.
@@ -110,7 +113,7 @@ pages cost 536 / 546 / 832 MB at 1x and 929 / 964 / 1449 MB at scale 2.
 ## Where the work happens, and what has to be cheap
 
 Importing an EBD is a **desktop** activity - it peaks around 0.8-1.5 GB of heap
-and is expected to. Everything *after* the import has to survive a **phone**
+and is expected to. Everything _after_ the import has to survive a **phone**
 (roughly 300-400 MB before the OS kills the tab), so post-import heap is the
 number that matters most.
 
@@ -123,10 +126,10 @@ transient ~11 MB; at 4x, ~45 MB.
 A trip is written as one `db.ebd.put()` value, and how large a single IndexedDB
 value may be **depends on the browser context**:
 
-| context | 109 MB value | 146 MB value |
-|---|---|---|
-| Playwright `browser.newContext()` (ephemeral) | 1.3 s | **rejected** at 133,169,152 bytes |
-| `launchPersistentContext` (real profile) | 1.3 s | 2.1 s |
+| context                                       | 109 MB value | 146 MB value                      |
+| --------------------------------------------- | ------------ | --------------------------------- |
+| Playwright `browser.newContext()` (ephemeral) | 1.3 s        | **rejected** at 133,169,152 bytes |
+| `launchPersistentContext` (real profile)      | 1.3 s        | 2.1 s                             |
 
 An ephemeral context reports a healthy quota (7 GB) and then refuses the write
 with "The serialized keys and/or value are too large". A real browser profile
@@ -162,12 +165,12 @@ npm run perf:large-flow -- /tmp/ebd-2x.zip
 
 Fixture output at each scale (seed 42), against the real export it models:
 
-| | rows | checklists | locations | `.txt` | zip | `ebd` | `checklists` | `comments` |
-|---|---|---|---|---|---|---|---|---|
-| real `ebd_MX-ROO` | 2.76M | 142,206 | 33,370 | 1.1 GB | 104 MB | 18.6 MB | 105.3 MB | 11.3 MB |
-| scale 0.02 | 45,040 | 2,708 | 621 | 16 MB | 2 MB | 0.5 MB | 2.0 MB | 0.3 MB |
-| scale 1 | 2.40M | 144,938 | 33,370 | 855 MB | 108 MB | 27.7 MB | 108.3 MB | 15.2 MB |
-| scale 2 | 4.82M | 290,800 | 66,740 | 1.7 GB | 217 MB | 55.2 MB | 216.8 MB | 30.5 MB |
+|                   | rows   | checklists | locations | `.txt` | zip    | `ebd`   | `checklists` | `comments` |
+| ----------------- | ------ | ---------- | --------- | ------ | ------ | ------- | ------------ | ---------- |
+| real `ebd_MX-ROO` | 2.76M  | 142,206    | 33,370    | 1.1 GB | 104 MB | 18.6 MB | 105.3 MB     | 11.3 MB    |
+| scale 0.02        | 45,040 | 2,708      | 621       | 16 MB  | 2 MB   | 0.5 MB  | 2.0 MB       | 0.3 MB     |
+| scale 1           | 2.40M  | 144,938    | 33,370    | 855 MB | 108 MB | 27.7 MB | 108.3 MB     | 15.2 MB    |
+| scale 2           | 4.82M  | 290,800    | 66,740    | 1.7 GB | 217 MB | 55.2 MB | 216.8 MB     | 30.5 MB    |
 
 Scale 1 matches the real export closely on the table that dominates memory
 (`checklists`, within 3%) and on location count exactly. Known simplifications:
@@ -199,3 +202,21 @@ quote, merged group checklists, subspecies rollups, a 1900-2026 date range) that
 a generator will not reproduce. Do not build subsets with line-based tools:
 sample whole checklists by `SAMPLING EVENT IDENTIFIER` with a real CSV reader
 configured for an unquoted TSV, so `ALL SPECIES REPORTED` stays meaningful.
+
+## Working workspace (v0.5)
+
+The historical `perf:standard` and `perf:large-flow` commands above exercise the legacy pages and importer. They do not cover the reviewed prototype port. Use `npm run perf:workspace` for the current `/workspace` interface.
+
+```bash
+npm run perf:workspace
+PERF_SCALES=1 npm run perf:workspace
+PERF_ARCHIVE=/absolute/path/to/trip.json npm run perf:workspace
+```
+
+The new test builds production assets and uses a disposable persistent browser profile, with no sign-in or live cloud writes. It seeds processed EBD data at 33,370, 66,740, and 133,480 locations, 506 taxa, 63 stops over 21 days, 450 route coordinates per leg, and 353 report checklists. Each synthetic location has 50 species counts and effort samples; this stresses workspace rendering and recomputation, rather than repeating the raw TSV import benchmark. The optional archive mode runs the same interactions against a private local JSON export without modifying the file or the user's browser database.
+
+It measures opening, five note edits, stop selection, area resizing, Map/Species switching, sorting, full-trip selection, and post-GC JavaScript heap. Interaction timing includes the handler and two animation frames. Default budgets are 10 seconds to open, 250 ms per interaction, and 400 MB post-import heap. `PERF_INTERACTION_MS` adjusts the interaction budget for slower machines; CI runs the 1x case with 500 ms. Reports are saved to `output/playwright/workspace-performance.json`; `PERF_RESULT` can change the output path. Install Chromium with `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an existing compatible executable.
+
+Mapbox rendering and source processing run normally, but the benchmark supplies an empty local base style to remove internet/tile variability. These are desktop Chromium measurements, not a guarantee of phone memory, frame rate, tile-download speed, or raw-import performance. Use the real archive and a phone for the next device-specific pass.
+
+The workspace now indexes immutable EBD locations by latitude, caches each stop's spatial membership, reuses report aggregates/date formatters/map sources, and computes species tables only while visible. Notes do not redraw maps or tables, and local saves update only changed stops. Geometry/type changes invalidate spatial and species results; duration/targets/personal-list changes invalidate planning results. Undo restores and recomputes those results. Species-map clustering runs in a disposable Web Worker and is terminated when the workspace closes.

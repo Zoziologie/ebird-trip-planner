@@ -1,19 +1,21 @@
-import { readFile } from "node:fs/promises";
-import { performance } from "node:perf_hooks";
-import process from "node:process";
-import JSZip from "jszip";
+import { readFile } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
+import process from 'node:process';
+import JSZip from 'jszip';
 import {
   createEbdImportAccumulator,
   finalizeEbdImport,
   streamEbdZipEntry,
-} from "../../src/utils/ebdImport.js";
+} from '../../src/utils/ebdImport.js';
 
 const archivePath = process.argv[2];
 if (!archivePath) {
-  throw new Error("Usage: npm run perf:large-import -- /path/to/ebd.zip");
+  throw new Error('Usage: npm run perf:large-import -- /path/to/ebd.zip');
 }
 
-const taxonomy = JSON.parse(await readFile(new URL("../../src/assets/eBird_taxonomy.json", import.meta.url)));
+const taxonomy = JSON.parse(
+  await readFile(new URL('../../src/assets/eBird_taxonomy.json', import.meta.url)),
+);
 const taxonomyByScientificName = Object.fromEntries(
   taxonomy.filter((row) => row.sciName).map((row) => [row.sciName, row]),
 );
@@ -24,7 +26,7 @@ const taxonomyByCode = Object.fromEntries(
 const archive = await readFile(archivePath);
 const zip = await JSZip.loadAsync(archive);
 const entry = Object.values(zip.files).reduce((largest, candidate) => {
-  if (!candidate.name.toLowerCase().endsWith(".txt") || !candidate._data) return largest;
+  if (!candidate.name.toLowerCase().endsWith('.txt') || !candidate._data) return largest;
   return !largest || candidate._data.uncompressedSize > largest._data.uncompressedSize
     ? candidate
     : largest;
@@ -38,7 +40,9 @@ await streamEbdZipEntry(entry, accumulator, (progress) => {
   if (roundedProgress === displayedProgress) return;
   displayedProgress = roundedProgress;
   const heapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-  console.log(`${roundedProgress}%: ${accumulator.recordCount.toLocaleString()} records, ${heapMb} MB heap`);
+  console.log(
+    `${roundedProgress}%: ${accumulator.recordCount.toLocaleString()} records, ${heapMb} MB heap`,
+  );
 });
 
 const result = finalizeEbdImport(accumulator);

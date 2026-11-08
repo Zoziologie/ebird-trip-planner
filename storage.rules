@@ -9,7 +9,8 @@ service firebase.storage {
     function access(id) { return firestore.get(/databases/(default)/documents/tripAccess/$(id)).data; }
     function editor(id) { return googleUser() && (access(id).ownerUid == request.auth.uid || request.auth.token.email.lower() in access(id).editorEmails); }
     match /trips/{id}/{file} {
-      allow get: if file == trip(id).revision + '.ebirdtrip' && (trip(id).public == true || editor(id));
+      allow get: if file == trip(id).revision + '.ebirdtrip' && (editor(id)
+        || (trip(id).public == true && !firestore.exists(/databases/(default)/documents/workspaces/$(id))));
       allow create: if editor(id) && trip(id).pending.uid == request.auth.uid
         && trip(id).pending.expiresAt > request.time && file == trip(id).pending.revision + '.ebirdtrip'
         && request.resource.size <= 50 * 1024 * 1024 && request.resource.contentType == 'application/gzip';

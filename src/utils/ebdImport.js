@@ -1,32 +1,32 @@
-import Papa from "papaparse";
+import Papa from 'papaparse';
 
 // Columns we read out of an EBD export. Rows are parsed as plain arrays
 // (`header: false`) and resolved through this index map: building one 48-key
 // object per row is by far the dominant cost when importing millions of rows.
 const EBD_COLUMNS = {
-  count: "OBSERVATION COUNT",
-  county: "COUNTY",
-  countyCode: "COUNTY CODE",
-  state: "STATE",
-  stateCode: "STATE CODE",
-  country: "COUNTRY",
-  countryCode: "COUNTRY CODE",
-  date: "OBSERVATION DATE",
-  time: "TIME OBSERVATIONS STARTED",
-  scientificName: "SCIENTIFIC NAME",
-  checklistId: "SAMPLING EVENT IDENTIFIER",
-  groupId: "GROUP IDENTIFIER",
-  allSpeciesReported: "ALL SPECIES REPORTED",
-  localityId: "LOCALITY ID",
-  locality: "LOCALITY",
-  localityType: "LOCALITY TYPE",
-  latitude: "LATITUDE",
-  longitude: "LONGITUDE",
-  durationMinutes: "DURATION MINUTES",
-  effortDistanceKm: "EFFORT DISTANCE KM",
-  speciesComments: "SPECIES COMMENTS",
+  count: 'OBSERVATION COUNT',
+  county: 'COUNTY',
+  countyCode: 'COUNTY CODE',
+  state: 'STATE',
+  stateCode: 'STATE CODE',
+  country: 'COUNTRY',
+  countryCode: 'COUNTRY CODE',
+  date: 'OBSERVATION DATE',
+  time: 'TIME OBSERVATIONS STARTED',
+  scientificName: 'SCIENTIFIC NAME',
+  checklistId: 'SAMPLING EVENT IDENTIFIER',
+  groupId: 'GROUP IDENTIFIER',
+  allSpeciesReported: 'ALL SPECIES REPORTED',
+  localityId: 'LOCALITY ID',
+  locality: 'LOCALITY',
+  localityType: 'LOCALITY TYPE',
+  latitude: 'LATITUDE',
+  longitude: 'LONGITUDE',
+  durationMinutes: 'DURATION MINUTES',
+  effortDistanceKm: 'EFFORT DISTANCE KM',
+  speciesComments: 'SPECIES COMMENTS',
   // eBird renamed this column; exports older than 2024 call it "TRIP COMMENTS".
-  checklistComments: ["CHECKLIST COMMENTS", "TRIP COMMENTS"],
+  checklistComments: ['CHECKLIST COMMENTS', 'TRIP COMMENTS'],
 };
 
 const EBD_COLUMN_FIELDS = Object.keys(EBD_COLUMNS);
@@ -36,7 +36,7 @@ const EBD_COLUMN_FIELDS = Object.keys(EBD_COLUMNS);
 const buildColumnIndex = (headerRow) => {
   const positions = new Map();
   for (let i = 0; i < headerRow.length; i += 1) {
-    const name = typeof headerRow[i] === "string" ? headerRow[i].trim().toUpperCase() : "";
+    const name = typeof headerRow[i] === 'string' ? headerRow[i].trim().toUpperCase() : '';
     if (name && !positions.has(name)) positions.set(name, i);
   }
   const columns = {};
@@ -70,7 +70,7 @@ const mergeComment = (existing, incoming) => {
 
 // "2019-04-21" -> 2019, without allocating a substring per row.
 const parseYear = (date) => {
-  if (typeof date !== "string" || date.length < 4) return NaN;
+  if (typeof date !== 'string' || date.length < 4) return NaN;
   let year = 0;
   for (let i = 0; i < 4; i += 1) {
     const digit = date.charCodeAt(i) - 48;
@@ -109,7 +109,7 @@ export const addEbdRow = (row, accumulator) => {
   }
 
   const count = cell(row, columns.count);
-  if (count === "0") return;
+  if (count === '0') return;
 
   accumulator.recordCount++;
 
@@ -131,11 +131,11 @@ export const addEbdRow = (row, accumulator) => {
   const match = accumulator.taxonomyByScientificName[sciName];
   const speciesID = match?.reportAs || match?.REPORT_AS || match?.speciesCode || sciName;
   const taxon = accumulator.taxonomyByCode[speciesID];
-  if (taxon?.category !== "species") return;
+  if (taxon?.category !== 'species') return;
 
   const checklistId = cell(row, columns.checklistId);
   const groupId = cell(row, columns.groupId) || checklistId;
-  const isComplete = cell(row, columns.allSpeciesReported) === "1";
+  const isComplete = cell(row, columns.allSpeciesReported) === '1';
   let checklist = accumulator.checklists.get(groupId);
 
   if (!checklist) {
@@ -147,7 +147,7 @@ export const addEbdRow = (row, accumulator) => {
         longitude: Number(cell(row, columns.longitude)),
         locality: cell(row, columns.locality),
         locality_id: localityId,
-        locality_hotspot: cell(row, columns.localityType) === "H",
+        locality_hotspot: cell(row, columns.localityType) === 'H',
         country: cell(row, columns.country),
         country_code: cell(row, columns.countryCode),
         state: cell(row, columns.state),
@@ -167,7 +167,7 @@ export const addEbdRow = (row, accumulator) => {
       effort_distance_km: Number(cell(row, columns.effortDistanceKm)),
       all_species_reported: isComplete,
       speciesByCode: isComplete ? new Map() : null,
-      checklist_comment: cell(row, columns.checklistComments) || "",
+      checklist_comment: cell(row, columns.checklistComments) || '',
       // Comment-bearing species only, kept for every checklist including the
       // incomplete ones whose species records are otherwise discarded. This is
       // the source for the comment corpus; allocated lazily because ~90% of
@@ -201,7 +201,7 @@ export const addEbdRow = (row, accumulator) => {
     checklist.speciesByCode.set(speciesCode, {
       code: speciesCode,
       count,
-      species_comment: rowComment || "",
+      species_comment: rowComment || '',
     });
     return;
   }
@@ -218,9 +218,7 @@ export const addEbdRow = (row, accumulator) => {
 
 export const finalizeEbdImport = (accumulator) => {
   for (const checklist of accumulator.checklists.values()) {
-    checklist.species = checklist.speciesByCode
-      ? Array.from(checklist.speciesByCode.values())
-      : [];
+    checklist.species = checklist.speciesByCode ? Array.from(checklist.speciesByCode.values()) : [];
     delete checklist.speciesByCode;
     checklist.species_comments = checklist.commentsByCode
       ? Array.from(checklist.commentsByCode.entries())
@@ -247,9 +245,9 @@ export const finalizeEbdImport = (accumulator) => {
 // is what makes the parse faithful.
 export const EBD_PARSE_OPTIONS = Object.freeze({
   header: false,
-  delimiter: "\t",
-  quoteChar: "\u0000",
-  escapeChar: "\u0000",
+  delimiter: '\t',
+  quoteChar: '\u0000',
+  escapeChar: '\u0000',
   skipEmptyLines: true,
   dynamicTyping: false,
 });
@@ -270,15 +268,15 @@ export const streamEbdZipEntry = (entry, accumulator, onProgress) =>
     const decoder = new TextDecoder();
     let bytesRead = 0;
     entry
-      .internalStream("uint8array")
-      .on("data", chunk => {
+      .internalStream('uint8array')
+      .on('data', (chunk) => {
         parser._finished = false;
         parser.parseChunk(decoder.decode(chunk, { stream: true }));
         bytesRead += chunk.byteLength;
-        onProgress?.(bytesRead / entry._data.uncompressedSize * 100, accumulator.recordCount);
+        onProgress?.((bytesRead / entry._data.uncompressedSize) * 100, accumulator.recordCount);
       })
-      .on("error", reject)
-      .on("end", () => {
+      .on('error', reject)
+      .on('end', () => {
         parser._finished = true;
         parser.parseChunk(decoder.decode());
       })
@@ -290,14 +288,18 @@ export const streamEbdTextFile = async (file, accumulator, onProgress) => {
   beginEbdFile(accumulator);
   const parser = new Papa.StringStreamer({
     ...EBD_PARSE_OPTIONS,
-    chunk(results) { for (const row of results.data) addEbdRow(row, accumulator); },
+    chunk(results) {
+      for (const row of results.data) addEbdRow(row, accumulator);
+    },
   });
   parser._nextChunk = () => {};
   const decoder = new TextDecoder();
   for (let offset = 0; offset < file.size; offset += 1024 * 1024) {
     const end = Math.min(offset + 1024 * 1024, file.size);
     parser._finished = false;
-    parser.parseChunk(decoder.decode(await file.slice(offset, end).arrayBuffer(), { stream: true }));
+    parser.parseChunk(
+      decoder.decode(await file.slice(offset, end).arrayBuffer(), { stream: true }),
+    );
     onProgress(end / file.size);
   }
   parser._finished = true;

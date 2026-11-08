@@ -1,23 +1,31 @@
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import { VitePWA } from "vite-plugin-pwa";
-import { readFileSync } from "node:fs";
+import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
 
-const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/ebird-trip-planner/",
+  build:
+    process.env.WORKSPACE_TEST === 'true'
+      ? {
+          rollupOptions: {
+            input: { app: 'index.html', workspaceHarness: 'tests/workspace/harness.html' },
+          },
+        }
+      : {},
+  base: '/ebird-trip-planner/',
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },
   plugins: [
     vue(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: 'autoUpdate',
       workbox: {
         globPatterns: [
-          "**/*.{js,css,html,ico,png,svg,webmanifest,woff,woff2,jpg,jpeg,gif,webp,avif,json}",
+          '**/*.{js,css,html,ico,png,svg,webmanifest,woff,woff2,jpg,jpeg,gif,webp,avif,json}',
         ],
         // bootstrap-icons.css appends a bare hex cache-busting param to its font
         // URLs (e.g. `?e34853135f9e39acf64315236852cd5a`). Workbox precaches the
@@ -28,9 +36,9 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: "StaleWhileRevalidate",
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: "google-fonts-stylesheets",
+              cacheName: 'google-fonts-stylesheets',
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 365,
@@ -39,9 +47,9 @@ export default defineConfig({
           },
           {
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: "CacheFirst",
+            handler: 'CacheFirst',
             options: {
-              cacheName: "google-fonts-webfonts",
+              cacheName: 'google-fonts-webfonts',
               cacheableResponse: {
                 statuses: [0, 200],
               },
@@ -53,9 +61,9 @@ export default defineConfig({
           },
           {
             urlPattern: /^https:\/\/api\.mapbox\.com\/directions\/v5\/.*/i,
-            handler: "NetworkFirst",
+            handler: 'NetworkFirst',
             options: {
-              cacheName: "mapbox-directions",
+              cacheName: 'mapbox-directions',
               networkTimeoutSeconds: 5,
               cacheableResponse: {
                 statuses: [0, 200],
@@ -68,9 +76,9 @@ export default defineConfig({
           },
           {
             urlPattern: /^https:\/\/(?:api\.mapbox\.com|.*\.tiles\.mapbox\.com)\/.*/i,
-            handler: "StaleWhileRevalidate",
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: "mapbox-resources",
+              cacheName: 'mapbox-resources',
               cacheableResponse: {
                 statuses: [0, 200],
               },
@@ -84,24 +92,24 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB
       },
       manifest: {
-        name: "eBird Trip Planner",
-        short_name: "eBird Trip",
-        description: "Offline-friendly birding trip planning and species reports.",
-        theme_color: "#2a9d8f",
-        background_color: "#ffffff",
-        display: "standalone",
-        scope: "/ebird-trip-planner/",
-        start_url: "/ebird-trip-planner/",
+        name: 'eBird Trip Planner',
+        short_name: 'eBird Trip',
+        description: 'Offline-friendly birding trip planning and species reports.',
+        theme_color: '#2a9d8f',
+        background_color: '#ffffff',
+        display: 'standalone',
+        scope: '/ebird-trip-planner/',
+        start_url: '/ebird-trip-planner/',
         icons: [
           {
-            src: "/ebird-trip-planner/pwa-192.png",
-            sizes: "192x192",
-            type: "image/png",
+            src: '/ebird-trip-planner/pwa-192.png',
+            sizes: '192x192',
+            type: 'image/png',
           },
           {
-            src: "/ebird-trip-planner/pwa-512.png",
-            sizes: "512x512",
-            type: "image/png",
+            src: '/ebird-trip-planner/pwa-512.png',
+            sizes: '512x512',
+            type: 'image/png',
           },
         ],
       },

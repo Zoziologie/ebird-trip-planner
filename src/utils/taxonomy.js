@@ -1,57 +1,57 @@
-import taxonomy from "../assets/eBird_taxonomy.json";
+import taxonomy from '../assets/eBird_taxonomy.json';
 
-const trimToString = (value) => (typeof value === "string" ? value.trim() : "");
+const trimToString = (value) => (typeof value === 'string' ? value.trim() : '');
 
-export const normalizeTaxonCategory = (value) => trimToString(value).toLowerCase();
+const normalizeTaxonCategory = (value) => trimToString(value).toLowerCase();
 
-export const pickFirstString = (source, keys) => {
+const pickFirstString = (source, keys) => {
   for (const key of keys) {
     const value = source?.[key];
-    if (value !== undefined && value !== null && String(value).trim() !== "") {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
       return String(value).trim();
     }
   }
-  return "";
+  return '';
 };
 
-export const TAXON_FIELD_KEYS = {
+const TAXON_FIELD_KEYS = {
   speciesCode: [
-    "speciesCode",
-    "code",
-    "species_code",
-    "taxonCode",
-    "taxon_code",
-    "speciesId",
-    "species_id",
-    "Species Code",
-    "SPECIES CODE",
+    'speciesCode',
+    'code',
+    'species_code',
+    'taxonCode',
+    'taxon_code',
+    'speciesId',
+    'species_id',
+    'Species Code',
+    'SPECIES CODE',
   ],
   scientificName: [
-    "Scientific Name",
-    "SCIENTIFIC NAME",
-    "scientificName",
-    "sciName",
-    "scientific_name",
+    'Scientific Name',
+    'SCIENTIFIC NAME',
+    'scientificName',
+    'sciName',
+    'scientific_name',
   ],
-  commonName: ["commonName", "comName", "common_name", "Common Name", "COMMON NAME"],
+  commonName: ['commonName', 'comName', 'common_name', 'Common Name', 'COMMON NAME'],
   category: [
-    "category",
-    "Category",
-    "CATEGORY",
-    "taxonCategory",
-    "taxon_category",
-    "Taxon Category",
-    "TAXON CATEGORY",
+    'category',
+    'Category',
+    'CATEGORY',
+    'taxonCategory',
+    'taxon_category',
+    'Taxon Category',
+    'TAXON CATEGORY',
   ],
-  reportAs: ["reportAs", "report_as", "REPORT_AS", "Report As", "REPORT AS"],
-  countable: ["Countable", "COUNTABLE", "countable"],
+  reportAs: ['reportAs', 'report_as', 'REPORT_AS', 'Report As', 'REPORT AS'],
+  countable: ['Countable', 'COUNTABLE', 'countable'],
 };
 
 export const isCountableTaxon = (source) => {
   const raw = pickFirstString(source, TAXON_FIELD_KEYS.countable);
   if (!raw) return true;
   const normalized = raw.toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
 };
 
 export const extractTaxonFields = (source = {}) => ({
@@ -79,19 +79,19 @@ export const taxonomyByCode = taxonomy.reduce((acc, row) => {
 const getReportAsCode = (taxon) =>
   trimToString(taxon?.reportAs || taxon?.REPORT_AS || taxon?.report_as);
 
-const resolveSpeciesFromTaxonRow = (taxonRow, fallbackReportAs = "") => {
+const resolveSpeciesFromTaxonRow = (taxonRow, fallbackReportAs = '') => {
   let current = taxonRow || null;
   let pendingReportAs = trimToString(fallbackReportAs);
   const visited = new Set();
 
-  while (current && normalizeTaxonCategory(current.category) !== "species") {
+  while (current && normalizeTaxonCategory(current.category) !== 'species') {
     pendingReportAs = getReportAsCode(current) || pendingReportAs;
     if (!pendingReportAs || visited.has(pendingReportAs)) {
       return null;
     }
     visited.add(pendingReportAs);
     current = taxonomyByCode[pendingReportAs] || null;
-    pendingReportAs = "";
+    pendingReportAs = '';
   }
 
   if (!current && pendingReportAs) {
@@ -99,14 +99,14 @@ const resolveSpeciesFromTaxonRow = (taxonRow, fallbackReportAs = "") => {
   }
 
   if (!current) return null;
-  return normalizeTaxonCategory(current.category) === "species" ? current : null;
+  return normalizeTaxonCategory(current.category) === 'species' ? current : null;
 };
 
 export const resolveSpeciesTaxon = ({
-  speciesCode = "",
-  scientificName = "",
-  category = "",
-  reportAs = "",
+  speciesCode = '',
+  scientificName = '',
+  category = '',
+  reportAs = '',
 } = {}) => {
   const normalizedCode = trimToString(speciesCode);
   const normalizedScientificName = trimToString(scientificName);
@@ -120,15 +120,15 @@ export const resolveSpeciesTaxon = ({
   const resolvedTaxon = resolveSpeciesFromTaxonRow(taxonRow, reportAs);
   if (resolvedTaxon) return resolvedTaxon;
 
-  if (explicitCategory && explicitCategory !== "species") return null;
-  if (taxonRow && normalizeTaxonCategory(taxonRow.category) !== "species") return null;
+  if (explicitCategory && explicitCategory !== 'species') return null;
+  if (taxonRow && normalizeTaxonCategory(taxonRow.category) !== 'species') return null;
   if (!normalizedCode && !normalizedScientificName) return null;
 
   return {
     speciesCode: normalizedCode || normalizedScientificName,
     sciName: normalizedScientificName,
-    comName: "",
-    category: "species",
+    comName: '',
+    category: 'species',
     taxonOrder: Infinity,
   };
 };
