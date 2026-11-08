@@ -28,21 +28,15 @@ Browser Storage downloads require the exact origin, including the port, in that 
 
 The paired workspace Firestore and Storage rules were also deployed and verified active on 19 October 2026. They allow automatic time zones in compact plans, restrict plan writes to authorized owners/editors, and close anonymous source-archive downloads once a trip is migrated. Existing cloud trips were not migrated or overwritten during this rollout. Uploads and workspace autosave were validated against emulators; the signed-in live-browser check covered the existing trip download.
 
-On 8 November 2026 the default allowance was raised from one to three cloud trips (Firestore ruleset `a376f8b6-ac2b-402d-b06d-0c2f8f2c25d4`; previous `e4f851af-7dd7-4725-b20a-e1f9abb11efe`). Capacity requests now ask for 4–10 trips.
+On 8 November 2026 the default allowance was raised from one to three cloud trips (Firestore ruleset `a376f8b6-ac2b-402d-b06d-0c2f8f2c25d4`; previous `e4f851af-7dd7-4725-b20a-e1f9abb11efe`). On the same day the capacity request form and its `capacityRequests` rules were removed (ruleset `2b1720c7-752b-4abe-a69a-b46f923104a9`).
 
 Storage rules inspect Firestore access documents. The Firebase Storage service agent requires the `roles/firebaserules.firestoreServiceAgent` role in this project.
 
-## Free allowance and capacity requests
+## Free allowance
 
 Any verified Google account can create three cloud trips without an invitation. Each compressed archive is limited to 50 MiB. Archives include life and region lists and all exported trip data. Shared trips do not consume an editor's own allowance. There is no global user limit.
 
-The **Request more capacity** form writes `capacityRequests/<Firebase UID>` with email, requested total trip slots (4–10), reason and pending status. Requests do not change permissions or capacity. Only administrators can approve them.
-
-To approve in Firebase console → Firestore:
-
-1. Open a document in `capacityRequests` and copy its document ID (the user's Firebase UID).
-2. Create or update `cloudAccounts/<same UID>` with integer `tripSlots`, for example `5` for five 50 MiB trips (250 MiB maximum active archives).
-3. Set the request's `status` to `approved` or `declined`. Changing status alone does not change capacity.
+There is no in-app capacity request. To give someone a different allowance, an administrator creates or updates `cloudAccounts/<Firebase UID>` in the Firebase console with integer `tripSlots` (1–10), for example `5` for five 50 MiB trips. The UID is listed under Authentication → Users.
 
 The client cannot edit its allowance. Default capacity is three trips if no `cloudAccounts` document exists. Lowering an allowance prevents creation in extra slots but preserves access to existing trips; it does not delete anything or ban the account. This is per-trip capacity, not an aggregate byte allowance. A total-size model would need a different reservation/accounting scheme.
 
@@ -76,6 +70,6 @@ Manual checks: Google login; reload remembers login; save and reload a trip; lif
 
 ## Usage reports
 
-Run `python3 scripts/cloud_usage_report.py` using your existing administrator `gcloud` login. The script is read-only and reports owners with saved trips, published/public trips, published archive bytes, all live bucket bytes, custom allowances, pending capacity requests and trips inactive for more than six months. It never approves requests or deletes data. It excludes retained soft-deleted objects, billing totals and download traffic; check Google Cloud Billing/Storage monitoring for those.
+Run `python3 scripts/cloud_usage_report.py` using your existing administrator `gcloud` login. The script is read-only and reports owners with saved trips, published/public trips, published archive bytes, all live bucket bytes, custom allowances and trips inactive for more than six months. It never changes allowances or deletes data. It excludes retained soft-deleted objects, billing totals and download traffic; check Google Cloud Billing/Storage monitoring for those.
 
 A Codex heartbeat in this chat is scheduled every Monday at 09:00 Europe/Paris to run the report. This depends on the local Codex environment and administrator login being available; it is not a server-side Firebase job or an email service. Pause or change it in Codex automations.

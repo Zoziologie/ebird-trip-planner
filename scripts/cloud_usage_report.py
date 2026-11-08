@@ -28,7 +28,6 @@ def documents(collection):
 
 
 trips = documents("cloudTrips")
-requests = documents("capacityRequests")
 accounts = documents("cloudAccounts")
 objects = pages(f"https://storage.googleapis.com/storage/v1/b/{project}.firebasestorage.app/o", "items")
 now = dt.datetime.now(dt.timezone.utc)
@@ -41,10 +40,6 @@ print(f"Owners with saved trips: {len({trip['ownerUid'] for trip in published})}
 print(f"Published archives: {sum(int(trip.get('size', 0)) for trip in published) / 1024**2:.1f} MiB")
 print(f"All live bucket objects: {len(objects)}; live storage: {sum(int(item['size']) for item in objects) / 1024**2:.1f} MiB (excludes soft-deleted data)")
 print(f"Accounts with custom allowances: {len(accounts)}")
-print("Pending capacity requests:")
-for request in requests:
-    if request.get("status") == "pending":
-        print(json.dumps({key: request.get(key) for key in ["id", "email", "tripSlots", "reason"]}))
 print("Trips inactive for more than six months (review only; nothing deleted):")
 for trip in published:
     active = trip.get("lastActiveAt", trip["updatedAt"])

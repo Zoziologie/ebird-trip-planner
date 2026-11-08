@@ -69,7 +69,7 @@ try {
   );
   await assertFails(setDoc(doc(owner.firestore(), 'cloudTrips', 'owner_3'), trip));
   await assertFails(setDoc(doc(owner.firestore(), 'cloudAccounts', 'owner'), { tripSlots: 10 }));
-  await assertSucceeds(
+  await assertFails(
     setDoc(doc(owner.firestore(), 'capacityRequests', 'owner'), {
       email: 'owner@example.com',
       tripSlots: 5,
@@ -77,9 +77,6 @@ try {
       status: 'pending',
       updatedAt: serverTimestamp(),
     }),
-  );
-  await assertFails(
-    updateDoc(doc(owner.firestore(), 'capacityRequests', 'owner'), { status: 'approved' }),
   );
   await assertFails(getDoc(doc(stranger.firestore(), 'capacityRequests', 'owner')));
   await env.withSecurityRulesDisabled(async (admin) =>

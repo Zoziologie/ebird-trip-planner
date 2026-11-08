@@ -20,7 +20,6 @@ import {
   cloudBindings,
   cloudError,
   cloudAllowance,
-  cloudRequest,
   bindCloudTrip,
 } from '../state/cloudTrips';
 import {
@@ -31,7 +30,6 @@ import {
   getCloudAccess,
   downloadCloudTrip,
   deleteCloudTrip,
-  requestCloudCapacity,
 } from '../utils/firebaseCloud';
 import { getWorkspaceCloud } from '../utils/workspaceCloud';
 import { workspaceVisits } from '../utils/workspacePlan';
@@ -80,9 +78,6 @@ const importing = ref(false),
   removal = ref(null);
 const createDialog = ref(null),
   removeDialog = ref(null);
-const capacity = ref(false),
-  slots = ref(4),
-  reason = ref('');
 const version = __APP_VERSION__;
 const now = ref(new Date());
 const clock = setInterval(() => (now.value = new Date()), 60000);
@@ -520,34 +515,6 @@ onBeforeUnmount(() => {
             source dataset. Offline changes sync when connected.
           </p>
           <p>Trips inactive for more than six months may be removed. Keep a downloaded backup.</p>
-          <button @click="capacity = !capacity">Request more capacity</button>
-          <p v-if="cloudRequest">Request: {{ cloudRequest.status }}</p>
-          <form
-            v-if="capacity"
-            @submit.prevent="
-              run(async () => {
-                await requestCloudCapacity(Number(slots), reason);
-                capacity = false;
-                status = 'Capacity request sent.';
-              })
-            "
-          >
-            <label
-              >Number of cloud trips<input
-                v-model="slots"
-                type="number"
-                min="4"
-                max="10"
-                required /></label
-            ><label
-              >Reason<textarea
-                v-model="reason"
-                rows="2"
-                maxlength="1000"
-                required
-              ></textarea></label
-            ><button class="primary" :disabled="busy">Send request</button>
-          </form>
         </details>
       </footer>
     </main>

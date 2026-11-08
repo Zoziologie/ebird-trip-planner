@@ -21,7 +21,6 @@ import {
   runTransaction,
   serverTimestamp,
   Timestamp,
-  setDoc,
   updateDoc,
   connectFirestoreEmulator,
 } from 'firebase/firestore';
@@ -42,7 +41,6 @@ import {
   cloudError,
   cloudLimitBytes,
   cloudAllowance,
-  cloudRequest,
   DEFAULT_CLOUD_TRIP_SLOTS,
 } from '../state/cloudTrips';
 
@@ -80,24 +78,12 @@ export const initCloud = async () => {
     cloudLibrary.value = [];
     cloudError.value = '';
     cloudAllowance.value = DEFAULT_CLOUD_TRIP_SLOTS;
-    cloudRequest.value = null;
     if (!user) return;
     subscriptions.push(
       onSnapshot(
         doc(database, 'cloudAccounts', user.uid),
         (snapshot) => {
           cloudAllowance.value = snapshot.data()?.tripSlots || DEFAULT_CLOUD_TRIP_SLOTS;
-        },
-        (error) => {
-          cloudError.value = error.message;
-        },
-      ),
-    );
-    subscriptions.push(
-      onSnapshot(
-        doc(database, 'capacityRequests', user.uid),
-        (snapshot) => {
-          cloudRequest.value = snapshot.data() || null;
         },
         (error) => {
           cloudError.value = error.message;
@@ -215,7 +201,7 @@ export const saveCloudTrip = async (blob, details, binding = null, onProgress = 
       });
     if (!id)
       throw new Error(
-        'Your cloud allowance is full. Update or delete an existing cloud trip, or request more capacity.',
+        'Your cloud allowance is full. Update or delete an existing cloud trip to free a slot.',
       );
   }
   const tripRef = doc(database, 'cloudTrips', id);
@@ -351,14 +337,4 @@ export const deleteCloudTrip = async (binding) => {
 export const recordCloudActivity = async (id) => {
   const { database } = await initCloud();
   await updateDoc(doc(database, 'cloudTrips', id), { lastActiveAt: serverTimestamp() });
-};
-export const requestCloudCapacity = async (tripSlots, reason) => {
-  const { auth, database } = await initCloud();
-  await setDoc(doc(database, 'capacityRequests', auth.currentUser.uid), {
-    email: auth.currentUser.email.toLowerCase(),
-    tripSlots,
-    reason: reason.trim(),
-    status: 'pending',
-    updatedAt: serverTimestamp(),
-  });
 };

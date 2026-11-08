@@ -19,7 +19,6 @@ export const cloudReady = ref(false);
 export const cloudLibrary = ref([]);
 export const DEFAULT_CLOUD_TRIP_SLOTS = 3;
 export const cloudAllowance = ref(DEFAULT_CLOUD_TRIP_SLOTS);
-export const cloudRequest = ref(null);
 export const cloudError = ref('');
 export const cloudBindings = ref(JSON.parse(localStorage.getItem('firebaseCloudTrips') || '{}'));
 export const cloudLimitBytes = 50 * 1024 * 1024;

@@ -95,7 +95,7 @@ Additional tools: [Vue Router](https://router.vuejs.org/), [PapaParse](https://w
 
 ## Firebase cloud storage
 
-Persistent Google sign-in, automatic plan sync, and visitor/editor links are available when Firebase web settings and workspace access rules are configured. The source dataset uploads once; itinerary edits update a compact shared plan. Older cloud archives can be opened and explicitly upgraded by their owner. Any Google account can save one compressed cloud trip up to 50 MiB, and request additional capacity for administrator approval. Free storage has no long-term retention guarantee; trips inactive for over six months may be deleted. Setup, access rules, billing caveats and testing are described in [docs/firebase-cloud.md](docs/firebase-cloud.md).
+Persistent Google sign-in, automatic plan sync, and visitor/editor links are available when Firebase web settings and workspace access rules are configured. The source dataset uploads once; itinerary edits update a compact shared plan. Older cloud archives can be opened and explicitly upgraded by their owner. Any Google account can save three compressed cloud trips of up to 50 MiB each; an administrator can set a different allowance per account. Free storage has no long-term retention guarantee; trips inactive for over six months may be deleted. Setup, access rules, billing caveats and testing are described in [docs/firebase-cloud.md](docs/firebase-cloud.md).
 
 ## Maintenance checks
 

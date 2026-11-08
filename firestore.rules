@@ -43,15 +43,6 @@ service cloud.firestore {
     match /cloudAccounts/{uid} {
       allow get: if googleUser() && request.auth.uid == uid;
     }
-    match /capacityRequests/{uid} {
-      allow get: if googleUser() && request.auth.uid == uid;
-      allow create, update: if googleUser() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['email', 'tripSlots', 'reason', 'status', 'updatedAt'])
-        && request.resource.data.email == request.auth.token.email.lower()
-        && request.resource.data.tripSlots is int && request.resource.data.tripSlots >= 4 && request.resource.data.tripSlots <= 10
-        && request.resource.data.reason is string && request.resource.data.reason.size() <= 1000
-        && request.resource.data.status == 'pending' && request.resource.data.updatedAt == request.time;
-    }
     match /tripAccess/{id} {
       allow read: if googleUser() && (resource.data.ownerUid == request.auth.uid || request.auth.token.email.lower() in resource.data.editorEmails);
       allow create: if ownSlot(id)
