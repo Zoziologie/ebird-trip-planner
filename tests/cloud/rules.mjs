@@ -67,12 +67,12 @@ try {
   await assertSucceeds(
     getDocs(query(collection(owner.firestore(), 'cloudTrips'), where('ownerUid', '==', 'owner'))),
   );
-  await assertFails(setDoc(doc(owner.firestore(), 'cloudTrips', 'owner_1'), trip));
+  await assertFails(setDoc(doc(owner.firestore(), 'cloudTrips', 'owner_3'), trip));
   await assertFails(setDoc(doc(owner.firestore(), 'cloudAccounts', 'owner'), { tripSlots: 10 }));
   await assertSucceeds(
     setDoc(doc(owner.firestore(), 'capacityRequests', 'owner'), {
       email: 'owner@example.com',
-      tripSlots: 3,
+      tripSlots: 5,
       reason: 'More destinations',
       status: 'pending',
       updatedAt: serverTimestamp(),
@@ -83,17 +83,17 @@ try {
   );
   await assertFails(getDoc(doc(stranger.firestore(), 'capacityRequests', 'owner')));
   await env.withSecurityRulesDisabled(async (admin) =>
-    setDoc(doc(admin.firestore(), 'cloudAccounts', 'owner'), { tripSlots: 3 }),
+    setDoc(doc(admin.firestore(), 'cloudAccounts', 'owner'), { tripSlots: 5 }),
   );
   const extra = writeBatch(owner.firestore());
-  extra.set(doc(owner.firestore(), 'tripAccess', 'owner_2'), {
+  extra.set(doc(owner.firestore(), 'tripAccess', 'owner_4'), {
     ownerUid: 'owner',
     ownerEmail: 'owner@example.com',
     editorEmails: [],
   });
-  extra.set(doc(owner.firestore(), 'cloudTrips', 'owner_2'), trip);
+  extra.set(doc(owner.firestore(), 'cloudTrips', 'owner_4'), trip);
   await assertSucceeds(extra.commit());
-  await assertFails(setDoc(doc(owner.firestore(), 'cloudTrips', 'owner_3'), trip));
+  await assertFails(setDoc(doc(owner.firestore(), 'cloudTrips', 'owner_5'), trip));
   const free = writeBatch(stranger.firestore());
   free.set(doc(stranger.firestore(), 'tripAccess', 'stranger_0'), {
     ownerUid: 'stranger',

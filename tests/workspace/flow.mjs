@@ -126,6 +126,16 @@ const login = async (page, subject) =>
     const { auth } = await initCloud();
     return (await signInWithCredential(auth, GoogleAuthProvider.credential(jwt))).user.uid;
   }, subject);
+// Admin write through the Firestore emulator REST API ("Bearer owner" bypasses security rules).
+const setTripSlots = async (uid, tripSlots) => {
+  const url = `http://127.0.0.1:8080/v1/projects/${testEnv.VITE_FIREBASE_PROJECT_ID}/databases/(default)/documents/cloudAccounts/${uid}`;
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { tripSlots: { integerValue: String(tripSlots) } } }),
+  });
+  assert.ok(response.ok, `set tripSlots: ${response.status} ${await response.text()}`);
+};
 const state = (page) =>
   page.evaluate(async () => {
     await window.workspaceHarnessReady;
@@ -346,7 +356,9 @@ try {
   assert.deepEqual(libraryErrors, []);
   await libraryPage.setViewportSize({ width: 1440, height: 1000 });
   console.log('Checking signed-in creation and old cloud archive migration…');
-  await login(libraryPage, 'library-owner');
+  const libraryUid = await login(libraryPage, 'library-owner');
+  // Limit this account to one slot so the second creation exercises the full-allowance fallback.
+  await setTripSlots(libraryUid, 1);
   await libraryPage.getByRole('button', { name: 'New trip', exact: true }).click();
   await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
   await libraryPage.locator('#new-trip-name').fill('New cloud trip');

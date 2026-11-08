@@ -43,6 +43,7 @@ import {
   cloudLimitBytes,
   cloudAllowance,
   cloudRequest,
+  DEFAULT_CLOUD_TRIP_SLOTS,
 } from '../state/cloudTrips';
 
 let services;
@@ -78,14 +79,14 @@ export const initCloud = async () => {
     cloudReady.value = true;
     cloudLibrary.value = [];
     cloudError.value = '';
-    cloudAllowance.value = 1;
+    cloudAllowance.value = DEFAULT_CLOUD_TRIP_SLOTS;
     cloudRequest.value = null;
     if (!user) return;
     subscriptions.push(
       onSnapshot(
         doc(database, 'cloudAccounts', user.uid),
         (snapshot) => {
-          cloudAllowance.value = snapshot.data()?.tripSlots || 1;
+          cloudAllowance.value = snapshot.data()?.tripSlots || DEFAULT_CLOUD_TRIP_SLOTS;
         },
         (error) => {
           cloudError.value = error.message;
@@ -198,7 +199,7 @@ export const saveCloudTrip = async (blob, details, binding = null, onProgress = 
   let id = binding?.id;
   if (!id) {
     const account = await getDoc(doc(database, 'cloudAccounts', user.uid));
-    const slots = account.data()?.tripSlots || 1;
+    const slots = account.data()?.tripSlots || DEFAULT_CLOUD_TRIP_SLOTS;
     const owned = await getDocs(
       query(collection(database, 'cloudTrips'), where('ownerUid', '==', user.uid)),
     );

@@ -7,7 +7,7 @@ service cloud.firestore {
     }
     function slots() {
       return exists(/databases/$(database)/documents/cloudAccounts/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/cloudAccounts/$(request.auth.uid)).data.tripSlots : 1;
+        ? get(/databases/$(database)/documents/cloudAccounts/$(request.auth.uid)).data.tripSlots : 3;
     }
     function ownerId(id) { return googleUser() && id.matches(request.auth.uid + '_[0-9]'); }
     function ownSlot(id) {
@@ -48,7 +48,7 @@ service cloud.firestore {
       allow create, update: if googleUser() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['email', 'tripSlots', 'reason', 'status', 'updatedAt'])
         && request.resource.data.email == request.auth.token.email.lower()
-        && request.resource.data.tripSlots is int && request.resource.data.tripSlots >= 2 && request.resource.data.tripSlots <= 10
+        && request.resource.data.tripSlots is int && request.resource.data.tripSlots >= 4 && request.resource.data.tripSlots <= 10
         && request.resource.data.reason is string && request.resource.data.reason.size() <= 1000
         && request.resource.data.status == 'pending' && request.resource.data.updatedAt == request.time;
     }

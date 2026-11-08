@@ -81,7 +81,7 @@ const importing = ref(false),
 const createDialog = ref(null),
   removeDialog = ref(null);
 const capacity = ref(false),
-  slots = ref(2),
+  slots = ref(4),
   reason = ref('');
 const version = __APP_VERSION__;
 const now = ref(new Date());
@@ -536,7 +536,7 @@ onBeforeUnmount(() => {
               >Number of cloud trips<input
                 v-model="slots"
                 type="number"
-                min="2"
+                min="4"
                 max="10"
                 required /></label
             ><label
