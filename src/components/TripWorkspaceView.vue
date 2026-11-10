@@ -336,36 +336,22 @@ defineExpose({
             </div>
           </section>
           <section id="species-panel" hidden>
-            <div class="species-heading">
-              <div>
-                <span class="eyebrow">Species</span>
-                <h1 id="species-title"></h1>
-                <div id="species-context" class="small"></div>
-              </div>
-              <button id="my-lists" class="edit-only">Life lists</button
-              ><input
-                id="search-species"
-                type="search"
-                placeholder="Find a species…"
-                aria-label="Find a species"
-              />
-            </div>
-            <div class="species-scope">
-              <button id="show-recorded" aria-pressed="false">Recorded</button
-              ><button id="show-historical" class="edit-only" aria-pressed="true">
-                Historical EBD</button
-              ><span id="species-evidence" class="small"></span>
-            </div>
             <div id="species-filters" class="species-filters edit-only">
               <div class="lifer-filters">
                 <strong>Filters</strong
-                ><label><input id="filter-life" type="checkbox" /> Life</label
-                ><label><input id="filter-region" type="checkbox" /> Region</label
-                ><label><input id="filter-trip" type="checkbox" /> Trip</label
+                ><label
+                  ><input id="filter-life" type="checkbox" />
+                  <i class="bi bi-globe2 lifer-icon" aria-hidden="true"></i> Life</label
+                ><label
+                  ><input id="filter-region" type="checkbox" />
+                  <i class="bi bi-geo-alt-fill lifer-icon" aria-hidden="true"></i> Region</label
+                ><label
+                  ><input id="filter-trip" type="checkbox" />
+                  <i class="bi bi-car-front-fill lifer-icon" aria-hidden="true"></i> Trip</label
                 ><label
                   ><input id="filter-interest" type="checkbox" />
-                  <i class="bi bi-star-fill target-star"></i> Interest</label
-                >
+                  <i class="bi bi-star-fill target-star" aria-hidden="true"></i> Interest</label
+                ><span id="species-evidence" class="small"></span>
               </div>
               <div class="probability-filters">
                 <label
@@ -401,9 +387,6 @@ defineExpose({
             </div>
             <div id="expected-summary" class="expected-summary edit-only"></div>
             <p class="small" id="report-status"></p>
-            <a href="https://ebird.org/tripreports" target="_blank" rel="noopener"
-              >Open eBird trip reports ↗</a
-            >
           </section>
         </main>
       </div>

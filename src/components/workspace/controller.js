@@ -60,7 +60,6 @@ export function mountWorkspace(root, model, options) {
     preview = false,
     basemap = 'outdoor',
     layer = '',
-    speciesView = 'historical',
     reportId = data.reportId,
     synced = data.reportChecklists.length > 0,
     clusterFeatures = [],
@@ -604,7 +603,7 @@ export function mountWorkspace(root, model, options) {
   root.addEventListener(
     'keydown',
     (e) => {
-      if (e.target.id === 'target-search' || e.target.id === 'search-species') return;
+      if (e.target.id === 'target-search') return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && writable()) {
         e.preventDefault();
         restoreHistory(!e.shiftKey);
@@ -1158,27 +1157,11 @@ export function mountWorkspace(root, model, options) {
     if (view !== 'species') return;
     const stop = active(),
       a = aggregation(stop),
-      recorded = speciesView === 'recorded' || !writable(),
+      recorded = !writable(),
       planned = recorded && (!synced || stage() === 'before');
     $('species-panel').classList.toggle('planning', !recorded);
-    $('species-title').textContent = stop?.name || data.name;
-    $('species-context').textContent = planned
-      ? 'Species of interest from your plan'
-      : recorded
-        ? (stop ? 'Report checklists inside the stop area' : 'All report checklists') +
-          ' · through ' +
-          dateLabel(cutoff())
-        : stop
-          ? 'Selected location · same itinerary selection'
-          : 'Full trip · all planned birding stops';
-    $('show-recorded').textContent =
-      !synced || stage() === 'before' ? 'Planned targets' : 'Recorded';
-    $('show-recorded').setAttribute('aria-pressed', recorded);
-    $('show-historical').setAttribute('aria-pressed', !recorded);
-    $('show-historical').textContent = 'Planning';
     $('species-filters').hidden = recorded;
     $('expected-summary').hidden = recorded;
-    const q = $('search-species').value.toLowerCase();
     if (recorded) {
       let codes = planned
         ? data.taxa
@@ -1189,7 +1172,7 @@ export function mountWorkspace(root, model, options) {
         codes = [...new Set([...codes, ...data.reportTaxa.map((t) => t.speciesCode)])];
       const items = codes
         .map((code) => taxa.get(code))
-        .filter((t) => t && [t.name, t.latin].join(' ').toLowerCase().includes(q))
+        .filter(Boolean)
         .sort((a, b) => a.name.localeCompare(b.name));
       $('species-columns').innerHTML =
         '<tr><th>Species</th><th>' + (planned ? 'Interest' : 'Individuals / lists') + '</th></tr>';
@@ -1231,21 +1214,26 @@ export function mountWorkspace(root, model, options) {
         : 'Individuals are summed across checklists, not unique birds.';
       return;
     }
-    if (!stop) $('filter-interest').checked = false;
     const all = planningSpecies(),
-      filters = ['life', 'region', 'trip', 'interest'].filter((id) => $('filter-' + id).checked),
       maximum = Number($('max-trip').value),
       minimum = Number($('min-rate').value);
     $('min-rate-name').textContent = stop ? 'Location (min)' : 'Average trip (min)';
     $('max-trip-label').textContent = Math.round(maximum * 100) + '%';
     $('min-rate-label').textContent = Math.round(minimum * 100) + '%';
-    $('filter-life').disabled = ![...taxa.values()].some((t) => t.life !== null);
-    $('filter-region').disabled = ![...taxa.values()].some((t) => t.region !== null);
-    $('filter-trip').disabled = !synced;
-    $('filter-interest').disabled = !stop;
+    // Only offer the filters that can match something here; hidden ones are cleared.
+    const usable = {
+      life: [...taxa.values()].some((t) => t.life !== null),
+      region: [...taxa.values()].some((t) => t.region !== null),
+      trip: synced,
+      interest: Boolean(stop),
+    };
+    for (const [id, show] of Object.entries(usable)) {
+      $('filter-' + id).closest('label').hidden = !show;
+      if (!show) $('filter-' + id).checked = false;
+    }
+    const filters = Object.keys(usable).filter((id) => $('filter-' + id).checked);
     const filtered = all.filter(
       (t) =>
-        [t.name, t.latin].join(' ').toLowerCase().includes(q) &&
         (!stop || t.location > 0) &&
         (stop ? t.location : t.avg) >= minimum &&
         t.cumulative <= maximum &&
@@ -1390,19 +1378,44 @@ export function mountWorkspace(root, model, options) {
           .toFixed(1),
       hasLife = [...taxa.values()].some((t) => t.life !== null),
       hasRegion = [...taxa.values()].some((t) => t.region !== null);
+    const stat = (icon, label, value) =>
+      '<span class="expected-stat">' +
+      (icon ? '<i class="bi bi-' + icon + ' lifer-icon" aria-hidden="true"></i> ' : '') +
+      label +
+      ' <b>' +
+      value +
+      '</b></span>';
     $('expected-summary').innerHTML =
-      '<strong>Expected number of species</strong><div>Total <b>' +
-      expected(() => true) +
-      '</b> · Life <b>' +
-      (hasLife ? expected((t) => t.newLife) : '—') +
-      '</b> · Region <b>' +
-      (hasRegion ? expected((t) => t.newRegion) : '—') +
-      '</b>' +
-      (synced && stop ? ' · Trip <b>' + expected((t) => !t.seen) + '</b>' : '') +
-      '</div><span class="small">Sum of ' +
+      '<span class="expected-line" title="Expected number of species: sum of ' +
       (stop ? 'location rates' : 'trip probabilities') +
-      ' across all taxa, before table filters. ' +
-      (!hasRegion ? 'Upload a region list in My lists.' : '') +
+      ' across all taxa, before table filters">' +
+      '<strong>Expected species</strong>' +
+      stat(
+        '',
+        'Total',
+        expected(() => true),
+      ) +
+      (hasLife
+        ? stat(
+            'globe2',
+            'Life',
+            expected((t) => t.newLife),
+          )
+        : '') +
+      (hasRegion
+        ? stat(
+            'geo-alt-fill',
+            'Region',
+            expected((t) => t.newRegion),
+          )
+        : '') +
+      (synced && stop
+        ? stat(
+            'car-front-fill',
+            'Trip',
+            expected((t) => !t.seen),
+          )
+        : '') +
       '</span>';
     const exportButton = document.createElement('button');
     exportButton.textContent = 'Export CSV';
@@ -1451,8 +1464,7 @@ export function mountWorkspace(root, model, options) {
     };
     $('expected-summary').append(exportButton);
     $('species-evidence').textContent = filtered.length + ' / ' + all.length + ' taxa';
-    $('report-status').textContent =
-      'Planning estimates use the original model: per-location reporting rates and duration-adjusted independent visits.';
+    $('report-status').textContent = '';
   }
   function renderJourney() {
     const a = aggregation(),
@@ -1502,10 +1514,7 @@ export function mountWorkspace(root, model, options) {
     $('hotspots').checked = $('personal-locations').checked = writable();
     $('species-layer').checked = false;
     $('report-layer').checked = true;
-    if (!writable()) {
-      $('layers').open = false;
-      speciesView = 'recorded';
-    }
+    if (!writable()) $('layers').open = false;
     renderJourney();
     renderSpecies();
     drawMarkers();
@@ -1783,11 +1792,6 @@ export function mountWorkspace(root, model, options) {
       $(kind + '-clear').disabled = !values.length;
     }
   }
-  const openLists = () => {
-    renderLists();
-    $('settings-dialog').showModal();
-  };
-  $('my-lists').onclick = openLists;
   for (const kind of ['life', 'region']) {
     $(kind + '-upload').onchange = async (e) => {
       const file = e.target.files[0],
@@ -1823,15 +1827,6 @@ export function mountWorkspace(root, model, options) {
   }
   $('map-view').onclick = () => setView('map');
   $('species-view').onclick = () => setView('species');
-  $('search-species').oninput = renderSpecies;
-  $('show-recorded').onclick = () => {
-    speciesView = 'recorded';
-    renderSpecies();
-  };
-  $('show-historical').onclick = () => {
-    speciesView = 'historical';
-    renderSpecies();
-  };
   $('mode').onclick = () => {
     preview = !preview;
     checked.clear();

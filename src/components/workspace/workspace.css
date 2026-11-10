@@ -1922,8 +1922,7 @@
 .trip-workspace-ui .mobile .species-filters {
   margin-bottom: 6px;
 }
-.trip-workspace-ui .mobile #report-status,
-.trip-workspace-ui .mobile #species-panel > a {
+.trip-workspace-ui .mobile #report-status {
   display: none;
 }
 .trip-workspace-ui .mobile .expected-summary .small {
@@ -2081,4 +2080,42 @@
 }
 .trip-workspace-ui #species-panel:not(.planning) td:first-child {
   text-align: left;
+}
+
+/* Species list: one compact expected-species line and filter chips with list icons. */
+.trip-workspace-ui .lifer-filters label[hidden] {
+  display: none;
+}
+.trip-workspace-ui .lifer-filters #species-evidence {
+  margin-left: auto;
+  color: var(--muted);
+}
+.trip-workspace-ui .expected-summary .expected-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  flex: 1;
+  min-width: 0;
+}
+.trip-workspace-ui .expected-summary .expected-line > strong {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  width: auto;
+}
+.trip-workspace-ui .expected-stat {
+  white-space: nowrap;
+}
+.trip-workspace-ui .expected-stat b {
+  font-size: 13px;
+}
+.trip-workspace-ui #species-panel > .species-filters:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+.trip-workspace-ui #report-status:empty {
+  display: none;
 }
