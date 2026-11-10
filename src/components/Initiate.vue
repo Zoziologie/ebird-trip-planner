@@ -1,65 +1,109 @@
 <template>
-  <p class="text-muted small">
-    To create a new trip, download the
-    <a href="https://ebird.org/data/download" target="_blank">eBird Basic Dataset (EBD)</a>
-    and load one or more .zip or .txt files below. Processing happens locally in your browser.
-  </p>
-  <div class="row">
-    <div class="col">
-      <input
-        type="file"
-        id="fileInput"
-        @change="handleFileUpload"
-        accept=".txt,.zip"
-        multiple
-        ref="fileInput"
-        class="form-control"
-        :disabled="disabled || isImporting || isProcessing"
-      />
-      <div v-if="isImporting" class="mt-2">
-        <div v-if="importPhase === 'Reading data'" class="progress">
-          <div
-            class="progress-bar"
-            role="progressbar"
-            :aria-valuenow="Math.floor(readingFileProgress)"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            :style="{ width: readingFileProgress + '%' }"
+  <ol class="ebd-steps">
+    <li class="ebd-step" :class="{ done: uploadedFiles.length > 0 || loadedRecordCount > 0 }">
+      <span class="ebd-step-badge" aria-hidden="true"
+        ><i v-if="uploadedFiles.length > 0 || loadedRecordCount > 0" class="bi bi-check-lg"></i
+        ><template v-else>1</template></span
+      >
+      <div class="ebd-step-body">
+        <h3>Grab your eBird data</h3>
+        <p>
+          Download one or several <strong>eBird Basic Datasets (EBD)</strong> for the region and
+          period you're dreaming about.
+        </p>
+        <a
+          class="ebd-step-link"
+          href="https://ebird.org/data/download"
+          target="_blank"
+          rel="noopener"
+          ><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Get the EBD on eBird</a
+        >
+      </div>
+    </li>
+    <li class="ebd-step" :class="{ done: loadedRecordCount > 0 && !isImporting && !hasError }">
+      <span class="ebd-step-badge" aria-hidden="true"
+        ><i v-if="loadedRecordCount > 0 && !isImporting && !hasError" class="bi bi-check-lg"></i
+        ><template v-else>2</template></span
+      >
+      <div class="ebd-step-body">
+        <h3>Drop them all in here</h3>
+        <p>
+          Add your EBD <code>.zip</code> or <code>.txt</code> files together and they'll be
+          processed right here in your browser. Nothing gets uploaded.
+        </p>
+        <input
+          type="file"
+          id="fileInput"
+          @change="handleFileUpload"
+          accept=".txt,.zip"
+          multiple
+          ref="fileInput"
+          class="ebd-file visually-hidden"
+          :disabled="disabled || isImporting || isProcessing"
+        />
+        <label
+          for="fileInput"
+          class="ebd-dropzone"
+          :class="{
+            dragging: dragging,
+            disabled: disabled || isImporting || isProcessing,
+          }"
+          @dragenter.prevent="dragging = true"
+          @dragover.prevent="dragging = true"
+          @dragleave="dragging = false"
+          @drop.prevent="dropFiles"
+        >
+          <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+          <span v-if="uploadedFiles.length"
+            ><strong>{{ uploadedFiles.map((file) => file.name).join(', ') }}</strong></span
           >
-            {{ Math.floor(readingFileProgress) }}% read
+          <span v-else><strong>Choose files</strong> or drag them here</span>
+        </label>
+        <div v-if="isImporting" class="mt-2">
+          <div v-if="importPhase === 'Reading data'" class="progress">
+            <div
+              class="progress-bar"
+              role="progressbar"
+              :aria-valuenow="Math.floor(readingFileProgress)"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :style="{ width: readingFileProgress + '%' }"
+            >
+              {{ Math.floor(readingFileProgress) }}% read
+            </div>
+          </div>
+          <div v-else class="d-flex align-items-center gap-2 small text-muted">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            {{ importPhase }}
+          </div>
+          <div class="d-flex justify-content-between small text-muted mt-1">
+            <span>{{ readingFileStatus }}</span>
+            <span>{{ importElapsed }}</span>
           </div>
         </div>
-        <div v-else class="d-flex align-items-center gap-2 small text-muted">
-          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-          {{ importPhase }}
-        </div>
-        <div class="d-flex justify-content-between small text-muted mt-1">
-          <span>{{ readingFileStatus }}</span>
-          <span>{{ importElapsed }}</span>
-        </div>
-      </div>
 
-      <!-- Success message - only after raw data is loaded -->
-      <div
-        v-if="loadedRecordCount > 0 && !isImporting && !hasError"
-        class="alert alert-success alert-dismissible mt-1 py-1"
-      >
-        <i class="bi bi-check-circle-fill me-2"></i>
-        <strong>Success!</strong>
-        {{ readingFileStatus }}
-      </div>
+        <!-- Success message - only after raw data is loaded -->
+        <div
+          v-if="loadedRecordCount > 0 && !isImporting && !hasError"
+          class="alert alert-success mt-2 py-1"
+        >
+          <i class="bi bi-check-circle-fill me-2"></i>
+          <strong>Success!</strong>
+          {{ readingFileStatus }}
+        </div>
 
-      <!-- Error message -->
-      <div v-if="hasError && !saveStatus" class="alert alert-danger mt-3">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-        <strong>Processing failed!</strong>
-        {{
-          readingFileStatus ||
-          'An error occurred while processing your file. Please check the file format and try again.'
-        }}
+        <!-- Error message -->
+        <div v-if="hasError && !saveStatus" class="alert alert-danger mt-2">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Processing failed!</strong>
+          {{
+            readingFileStatus ||
+            'An error occurred while processing your file. Please check the file format and try again.'
+          }}
+        </div>
       </div>
-    </div>
-  </div>
+    </li>
+  </ol>
   <div class="row">
     <div class="col" v-if="availableYears.min !== null">
       <!-- State/Province Filters -->
@@ -372,8 +416,14 @@ export default {
       readingFileProgress.value = 0;
     };
 
-    const handleFileUpload = async (event) => {
-      const files = Array.from(event.target.files || []);
+    const dragging = ref(false);
+    const handleFileUpload = (event) => loadFiles(Array.from(event.target.files || []));
+    const dropFiles = (event) => {
+      dragging.value = false;
+      if (props.disabled || isImporting.value || isProcessing.value) return;
+      loadFiles(Array.from(event.dataTransfer?.files || []));
+    };
+    const loadFiles = async (files) => {
       if (files.length === 0) return;
       clearLoadedResults();
       saveStatus.value = '';
@@ -381,7 +431,7 @@ export default {
       const invalidFile = files.find((file) => !/\.(txt|zip)$/i.test(file.name));
       if (invalidFile) {
         alert('Please select only .txt or .zip files');
-        event.target.value = '';
+        if (fileInput.value) fileInput.value.value = '';
         uploadedFiles.value = [];
         return;
       }
@@ -782,6 +832,8 @@ export default {
       processingUnit,
       processingElapsed,
       handleFileUpload,
+      dropFiles,
+      dragging,
       readFiles,
       processChecklists,
       availableStates,
@@ -794,3 +846,132 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.ebd-steps {
+  --step-accent: var(--green, var(--app-color-deep-teal));
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 18px;
+  display: grid;
+  gap: 12px;
+}
+.ebd-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line, #dce3df);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fff 0%, #f5f9f7 100%);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+.ebd-step.done {
+  border-color: color-mix(in srgb, var(--step-accent) 35%, transparent);
+}
+.ebd-step-badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--step-accent) 12%, white);
+  color: var(--step-accent);
+  font-weight: 700;
+  font-size: 15px;
+}
+.ebd-step.done .ebd-step-badge {
+  background: var(--step-accent);
+  color: white;
+  animation: ebd-pop 0.35s ease-out;
+}
+.ebd-step-body {
+  min-width: 0;
+}
+.ebd-step h3 {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 6px 0 4px;
+}
+.ebd-step p {
+  margin: 0 0 10px;
+  color: var(--muted, #687573);
+}
+.ebd-step code {
+  color: inherit;
+  background: color-mix(in srgb, var(--step-accent) 8%, white);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.ebd-step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.ebd-step-link:hover {
+  text-decoration: underline;
+}
+.ebd-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 12px;
+  border: 2px dashed color-mix(in srgb, var(--step-accent) 35%, transparent);
+  border-radius: 10px;
+  background: white;
+  color: var(--muted, #687573);
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+.ebd-dropzone i {
+  font-size: 26px;
+  color: var(--step-accent);
+  transition: transform 0.2s ease;
+}
+.ebd-dropzone strong {
+  color: var(--step-accent);
+}
+.ebd-dropzone:hover,
+.ebd-dropzone.dragging,
+.ebd-file:focus-visible + .ebd-dropzone {
+  border-color: var(--step-accent);
+  background: color-mix(in srgb, var(--step-accent) 6%, white);
+}
+.ebd-dropzone.dragging i,
+.ebd-dropzone:hover i {
+  transform: translateY(-3px);
+}
+.ebd-dropzone.disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+@keyframes ebd-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ebd-step.done .ebd-step-badge {
+    animation: none;
+  }
+  .ebd-dropzone i {
+    transition: none;
+  }
+}
+</style>
