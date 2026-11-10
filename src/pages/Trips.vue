@@ -7,6 +7,7 @@ import {
   onBeforeUnmount,
   watch,
   defineAsyncComponent,
+  nextTick,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { liveQuery } from 'dexie';
@@ -39,6 +40,7 @@ import { readTripArchive, restoreTripArchive } from '../utils/tripData';
 import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
 import { uniqueTripName } from '../utils/tripNames';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
+import zoziologieLogo from '../assets/zoziologie-logo.svg';
 import { tripDates } from '../utils/tripDates';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
@@ -77,7 +79,8 @@ const importing = ref(false),
   pendingImport = shallowRef(null),
   removal = ref(null);
 const createDialog = ref(null),
-  removeDialog = ref(null);
+  removeDialog = ref(null),
+  tripFilePicker = ref(null);
 const version = __APP_VERSION__;
 const now = ref(new Date());
 const clock = setInterval(() => (now.value = new Date()), 60000);
@@ -253,27 +256,112 @@ const create = async (payload, onProgress = () => {}) => {
   onProgress(1, 1, 'save steps');
   await finishNew(id);
 };
-const importFile = async (event) => {
-  const file = event.target.files[0];
+// The name field is usable while the trip file is still being read; the trip's saved name only
+// replaces the file-based guess if the person has not typed their own.
+let nameTouched = false,
+  loadToken = 0;
+const loadTripFile = async (file) => {
   if (!file) return;
+  const token = ++loadToken;
   importing.value = true;
   error.value = '';
   pendingImport.value = null;
+  progress.value = 'Reading trip file…';
+  nameTouched = false;
+  name.value = uniqueTripName(
+    names.value,
+    file.name
+      .replace(/\.(ebirdtrip|gz|json)$/gi, '')
+      .replace(/^ebird-trip-/i, '')
+      .replace(/[-_]+/g, ' ')
+      .trim() || 'Imported trip',
+  );
   try {
-    pendingImport.value = await decodeTripArchive(file, (fraction, stage) => {
+    const payload = await decodeTripArchive(file, (fraction, stage) => {
+      if (token !== loadToken) return;
       progress.value =
-        stage === 'parsing' ? 'Preparing trip…' : `Reading backup · ${Math.round(fraction * 100)}%`;
+        stage === 'parsing'
+          ? 'Preparing trip…'
+          : `Reading trip file · ${Math.round(fraction * 100)}%`;
     });
-    name.value = uniqueTripName(names.value, pendingImport.value.trip.name);
-    progress.value = `${pendingImport.value.visits.length} stops · ${pendingImport.value.trip.tripReportId ? 'eBird trip report link included' : 'Ready to import'}`;
+    if (token !== loadToken) return;
+    pendingImport.value = payload;
+    if (!nameTouched) name.value = uniqueTripName(names.value, payload.trip.name);
+    progress.value = '';
   } catch (failure) {
-    error.value = failure.message;
+    if (token === loadToken) error.value = failure.message;
   } finally {
-    importing.value = false;
-    event.target.value = '';
+    if (token === loadToken) importing.value = false;
   }
 };
-const importBackup = () =>
+const openImport = (file) => {
+  start('import');
+  loadTripFile(file);
+  nextTick(() => document.getElementById('new-trip-name')?.select());
+};
+const plural = (count, word) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
+const importStats = computed(() => {
+  const payload = pendingImport.value;
+  if (!payload) return [];
+  const dates = tripDates(payload.visits, payload.trip.timeZone);
+  const locations = payload.ebd?.locations?.length || 0;
+  return [
+    { icon: 'geo-alt', text: plural(payload.visits.length, 'stop') },
+    dates.group !== 'undated' && { icon: 'calendar3', text: dates.label },
+    locations && { icon: 'binoculars', text: plural(locations, 'eBird location') },
+    payload.trip.tripReportId && { icon: 'link-45deg', text: 'eBird trip report linked' },
+  ].filter(Boolean);
+});
+const closeImport = () => {
+  loadToken += 1;
+  pendingImport.value = null;
+  importing.value = false;
+};
+const importFile = async (event) => {
+  await loadTripFile(event.target.files[0]);
+  event.target.value = '';
+};
+// The Import trip button goes straight to the file picker; the dialog opens once a file is chosen.
+const pickTripFile = (event) => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  openImport(file);
+};
+// Dropping an .ebirdtrip file on the trips area imports it.
+const dragging = ref(false);
+let dragDepth = 0;
+const canDrop = (event) =>
+  event.dataTransfer?.types.includes('Files') &&
+  !busy.value &&
+  !importing.value &&
+  !createDialog.value?.open &&
+  !removeDialog.value?.open;
+const dragEnter = (event) => {
+  if (!canDrop(event)) return;
+  event.preventDefault();
+  dragDepth += 1;
+  dragging.value = true;
+};
+const dragOver = (event) => {
+  if (!canDrop(event)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+};
+const dragLeave = () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) dragging.value = false;
+};
+const dropFile = (event) => {
+  dragDepth = 0;
+  dragging.value = false;
+  if (!canDrop(event)) return;
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  openImport(file);
+};
+const importTrip = () =>
   run(async () => {
     const id = await restoreTripArchive(
       {
@@ -289,7 +377,7 @@ const importBackup = () =>
     );
     await finishNew(id);
   });
-const backup = async (item) => {
+const exportTrip = async (item) => {
   const payload = item.localId
     ? await readTripArchive(item.localId)
     : await decodeTripArchive(await downloadCloudTrip(await getCloudTrip(item.cloudId)));
@@ -339,7 +427,7 @@ const remove = () =>
     } else {
       if (await db.workspaceRecovery.where('tripId').equals(item.localId).count())
         throw new Error('Review recovery copies inside the trip before removing this device copy.');
-      await backup(item);
+      await exportTrip(item);
       await db.transaction(
         'rw',
         db.trips,
@@ -362,7 +450,7 @@ const remove = () =>
         Object.entries(cloudBindings.value).filter(([id]) => id !== item.localId),
       );
       await refreshTrips();
-      status.value = 'Backup downloaded and device copy removed. Any cloud trip is kept.';
+      status.value = 'Trip exported and device copy removed. Any cloud trip is kept.';
     }
     localStorage.setItem('firebaseCloudTrips', JSON.stringify(cloudBindings.value));
     removeDialog.value.close();
@@ -411,8 +499,15 @@ onBeforeUnmount(() => {
           <h1>My trips</h1>
         </div>
         <div class="library-actions">
-          <button :disabled="busy" @click="start('import')">
-            <i aria-hidden="true" class="bi bi-upload"></i> Import backup</button
+          <input
+            id="trip-file-picker"
+            ref="tripFilePicker"
+            type="file"
+            hidden
+            accept=".ebirdtrip,.gz,.json,application/gzip,application/json"
+            @change="pickTripFile"
+          /><button :disabled="busy" @click="tripFilePicker.click()">
+            <i aria-hidden="true" class="bi bi-upload"></i> Import trip</button
           ><button class="primary" :disabled="busy" @click="start('new')">
             <i aria-hidden="true" class="bi bi-plus-lg"></i> New trip
           </button>
@@ -427,147 +522,187 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="status" class="library-notice" role="status">{{ status }}</p>
       <p v-if="cloudError" class="library-error" role="alert">{{ cloudError }}</p>
-      <template v-if="library.length">
-        <section
-          v-for="group in groups.filter((group) => group.trips.length)"
-          :key="group.id"
-          class="trip-group"
-        >
-          <h2>{{ group.title }}</h2>
-          <div class="trip-cards">
-            <article
-              v-for="item in group.trips"
-              :key="item.localId || item.cloudId"
-              class="trip-card"
-            >
-              <div class="trip-card-top">
-                <span class="trip-storage"
-                  ><i
+      <div
+        class="library-drop-zone"
+        :class="{ dragging }"
+        @dragenter="dragEnter"
+        @dragover="dragOver"
+        @dragleave="dragLeave"
+        @drop="dropFile"
+      >
+        <div v-if="dragging" class="library-drop-overlay" aria-hidden="true">
+          <div><i class="bi bi-upload"></i> Drop an .ebirdtrip file to import it</div>
+        </div>
+        <template v-if="library.length">
+          <section
+            v-for="group in groups.filter((group) => group.trips.length)"
+            :key="group.id"
+            class="trip-group"
+          >
+            <h2>{{ group.title }}</h2>
+            <div class="trip-cards">
+              <article
+                v-for="item in group.trips"
+                :key="item.localId || item.cloudId"
+                class="trip-card"
+              >
+                <div class="trip-card-top">
+                  <span class="trip-storage"
+                    ><i
+                      aria-hidden="true"
+                      :class="'bi bi-' + (item.cloudId ? 'cloud-check' : 'device-ssd')"
+                    ></i>
+                    {{ connection(item) }}</span
+                  >
+                  <details class="trip-card-menu">
+                    <summary :aria-label="'Options for ' + item.name">
+                      <i aria-hidden="true" class="bi bi-three-dots"></i>
+                    </summary>
+                    <div>
+                      <button
+                        :disabled="busy || (!item.localId && !online)"
+                        @click="run(() => exportTrip(item))"
+                      >
+                        Export trip (.ebirdtrip)</button
+                      ><button
+                        v-if="item.localId && !item.sync?.cloudId && cloudUser"
+                        :disabled="busy || !online"
+                        @click="enable(item)"
+                      >
+                        Enable cloud autosave</button
+                      ><button v-if="item.localId" :disabled="busy" @click="askRemove(item)">
+                        Remove device copy…</button
+                      ><button
+                        v-if="item.cloud?.owned"
+                        :disabled="busy || !online"
+                        @click="askRemove(item, true)"
+                      >
+                        Delete cloud trip…
+                      </button>
+                    </div>
+                  </details>
+                </div>
+                <h3>{{ item.name }}</h3>
+                <p class="trip-dates">
+                  <i class="bi bi-calendar3" aria-hidden="true"></i> {{ item.dates.label }}
+                </p>
+                <p class="trip-dates">
+                  <i
                     aria-hidden="true"
-                    :class="'bi bi-' + (item.cloudId ? 'cloud-check' : 'device-ssd')"
+                    :class="
+                      'bi bi-' + (item.stopCount !== undefined ? 'geo-alt' : 'cloud-arrow-down')
+                    "
                   ></i>
-                  {{ connection(item) }}</span
-                >
-                <details class="trip-card-menu">
-                  <summary :aria-label="'Options for ' + item.name">
-                    <i aria-hidden="true" class="bi bi-three-dots"></i>
-                  </summary>
-                  <div>
-                    <button
-                      :disabled="busy || (!item.localId && !online)"
-                      @click="run(() => backup(item))"
-                    >
-                      Download backup</button
-                    ><button
-                      v-if="item.localId && !item.sync?.cloudId && cloudUser"
-                      :disabled="busy || !online"
-                      @click="enable(item)"
-                    >
-                      Enable cloud autosave</button
-                    ><button v-if="item.localId" :disabled="busy" @click="askRemove(item)">
-                      Remove device copy…</button
-                    ><button
-                      v-if="item.cloud?.owned"
-                      :disabled="busy || !online"
-                      @click="askRemove(item, true)"
-                    >
-                      Delete cloud trip…
-                    </button>
-                  </div>
-                </details>
-              </div>
-              <h3>{{ item.name }}</h3>
-              <p class="trip-dates">
-                <i class="bi bi-calendar3" aria-hidden="true"></i> {{ item.dates.label }}
-              </p>
-              <p class="library-muted">
-                {{
-                  item.stopCount !== undefined
-                    ? item.stopCount + ' stops'
-                    : 'Open to download for offline use'
-                }}<span v-if="item.timeZone"> · {{ item.timeZone.replaceAll('_', ' ') }}</span>
-              </p>
-              <div class="trip-card-footer">
-                <button
-                  class="primary"
-                  :disabled="busy || (!item.localId && (!online || !cloudReady))"
-                  @click="open(item)"
-                >
-                  Open trip <i aria-hidden="true" class="bi bi-arrow-right"></i>
-                </button>
-              </div>
-            </article>
-          </div>
-        </section>
-      </template>
-      <div v-else class="library-empty">
-        <i aria-hidden="true" class="bi bi-map"></i>
-        <h2>Your next birding trip starts here</h2>
-        <p>Load eBird data to plan a trip, or import a saved trip backup.</p>
-        <button class="primary" @click="start('new')">Create your first trip</button>
+                  {{
+                    item.stopCount !== undefined
+                      ? item.stopCount + (item.stopCount === 1 ? ' stop' : ' stops')
+                      : 'Open to download for offline use'
+                  }}<span v-if="item.timeZone"> · {{ item.timeZone.replaceAll('_', ' ') }}</span>
+                </p>
+                <div class="trip-card-footer">
+                  <button
+                    class="primary"
+                    :disabled="busy || (!item.localId && (!online || !cloudReady))"
+                    @click="open(item)"
+                  >
+                    Open trip <i aria-hidden="true" class="bi bi-arrow-right"></i>
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </template>
+        <div v-else class="library-empty">
+          <button class="primary library-first-trip" @click="start('new')">
+            <i aria-hidden="true" class="bi bi-plus-lg"></i> Create your first trip
+          </button>
+          <p>or drop an .ebirdtrip file here</p>
+        </div>
       </div>
       <footer class="library-footer">
-        <span>v{{ version }} · Edits save automatically on this device.</span>
+        <div class="library-footer-links">
+          <span>v{{ version }}</span
+          ><span class="dot" aria-hidden="true">·</span
+          ><a href="https://github.com/Zoziologie/ebird-trip-planner" target="_blank" rel="noopener"
+            ><i aria-hidden="true" class="bi bi-github"></i> GitHub</a
+          ><span class="dot" aria-hidden="true">·</span
+          ><a
+            class="library-sponsor"
+            href="https://github.com/sponsors/Zoziologie"
+            target="_blank"
+            rel="noopener"
+            ><i aria-hidden="true" class="bi bi-heart-fill"></i> Support</a
+          ><span class="dot" aria-hidden="true">·</span><span>Powered by</span
+          ><a
+            class="library-zoziologie"
+            href="https://zoziologie.raphaelnussbaumer.com/"
+            target="_blank"
+            rel="noopener"
+            ><img :src="zoziologieLogo" alt="" /> Zoziologie</a
+          >
+        </div>
         <details v-if="cloudUser">
           <summary>Cloud storage & account</summary>
           <p>
             {{ cloudAllowance }} cloud {{ cloudAllowance === 1 ? 'trip' : 'trips' }} · 50 MB per
             source dataset. Offline changes sync when connected.
           </p>
-          <p>Trips inactive for more than six months may be removed. Keep a downloaded backup.</p>
+          <p>
+            Trips inactive for more than six months may be removed. Export an .ebirdtrip file to
+            keep a copy.
+          </p>
         </details>
       </footer>
     </main>
     <dialog
       ref="createDialog"
       class="library-dialog"
-      @close="pendingImport = null"
-      @cancel="busy || importing ? $event.preventDefault() : null"
+      @close="closeImport"
+      @cancel="busy ? $event.preventDefault() : null"
     >
       <div class="library-dialog-heading">
-        <h2>{{ mode === 'import' ? 'Import a trip backup' : 'New trip' }}</h2>
+        <h2>{{ mode === 'import' ? 'Import an eBird trip' : 'New trip' }}</h2>
         <button
           aria-label="Close new trip"
-          :disabled="busy || importing"
+          :disabled="busy || (importing && mode !== 'import')"
           @click="createDialog.close()"
         >
           <i aria-hidden="true" class="bi bi-x-lg"></i>
         </button>
       </div>
-      <p class="library-muted">
-        {{
-          mode === 'import'
-            ? 'Imports create a separate trip. Existing trips are kept.'
-            : 'Start by loading eBird data for your destination. Every trip includes its own dataset.'
-        }}
-      </p>
       <p v-if="error" class="library-error" role="alert">{{ error }}</p>
-      <template v-if="mode === 'import'"
-        ><label for="trip-archive-input">Saved trip file</label
-        ><input
-          id="trip-archive-input"
-          type="file"
-          accept=".ebirdtrip,.gz,.json,application/gzip,application/json"
-          :disabled="busy || importing"
-          @change="importFile"
-        />
-        <p role="status" class="library-muted">{{ progress }}</p></template
-      >
-      <template v-if="mode === 'import' && pendingImport"
-        ><label for="new-trip-name">Trip name</label
+      <template v-if="mode === 'import' && (importing || pendingImport)"
+        ><label for="new-trip-name" class="visually-hidden">Trip name</label
         ><input
           id="new-trip-name"
           v-model="name"
-          :disabled="busy || importing"
-          placeholder="e.g. Oman, February"
+          class="library-import-name"
+          :disabled="busy"
+          placeholder="Trip name"
+          @input="nameTouched = true"
         />
         <p v-if="duplicate" class="library-error">
           Choose a different name; this name is already used.
         </p>
+        <ul v-if="pendingImport" class="library-import-stats">
+          <li v-for="stat in importStats" :key="stat.icon">
+            <i aria-hidden="true" :class="'bi bi-' + stat.icon"></i> {{ stat.text }}
+          </li>
+        </ul>
+        <p v-else role="status" class="library-muted">{{ progress }}</p>
         <label v-if="cloudUser && online" class="library-check"
           ><input v-model="saveOnline" type="checkbox" /> Enable cloud autosave</label
         ></template
       >
+      <template v-if="mode === 'import' && error && !importing"
+        ><label for="trip-archive-input">Choose another file</label
+        ><input
+          id="trip-archive-input"
+          type="file"
+          accept=".ebirdtrip,.gz,.json,application/gzip,application/json"
+          :disabled="busy"
+          @change="importFile"
+      /></template>
       <div v-if="mode !== 'import'" class="library-create-actions">
         <Initiate
           :disabled="busy"
@@ -593,12 +728,12 @@ onBeforeUnmount(() => {
         </Initiate>
       </div>
       <button
-        v-else-if="pendingImport"
+        v-else-if="importing || pendingImport"
         class="primary"
-        :disabled="busy || importing || !name.trim() || duplicate"
-        @click="importBackup"
+        :disabled="busy || !pendingImport || !name.trim() || duplicate"
+        @click="importTrip"
       >
-        Import trip
+        {{ pendingImport ? 'Import trip' : 'Reading trip file…' }}
       </button>
     </dialog>
     <dialog ref="removeDialog" class="library-dialog">
@@ -611,14 +746,14 @@ onBeforeUnmount(() => {
           {{
             removal.cloud
               ? 'Shared links will stop working. Copies already on this device are kept.'
-              : 'A backup will download before removal. Any cloud version stays available. Keep the downloaded backup to restore device-only edits.'
+              : 'The trip is exported as an .ebirdtrip file before removal. Any cloud version stays available. Keep that file to restore device-only edits.'
           }}
         </p>
         <p v-if="error" class="library-error" role="alert">{{ error }}</p>
         <div class="library-actions">
           <button :disabled="busy" @click="removeDialog.close()">Cancel</button
           ><button :disabled="busy" @click="remove">
-            {{ removal.cloud ? 'Delete cloud trip' : 'Back up & remove device copy' }}
+            {{ removal.cloud ? 'Delete cloud trip' : 'Export & remove device copy' }}
           </button>
         </div></template
       >

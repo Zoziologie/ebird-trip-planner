@@ -4,7 +4,10 @@
   --line: #dce3df;
   --muted: #687573;
   --tint: #eaf2f0;
-  min-height: 100%;
+  --green-dark: #2b5659;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   background: #f3f5f2;
   color: #2b3435;
   font:
@@ -20,6 +23,10 @@
   padding: 8px 12px;
   font: inherit;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 .trip-library-page button:hover:not(:disabled) {
   background: var(--tint);
@@ -33,6 +40,10 @@
   background: var(--green);
   border-color: var(--green);
   color: white;
+}
+.trip-library-page button.primary:hover:not(:disabled) {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
 }
 .trip-library-page a {
   color: var(--green);
@@ -90,8 +101,12 @@
   font-size: 12px;
 }
 .library-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  width: 100%;
   max-width: 1120px;
-  margin: auto;
+  margin: 0 auto;
   padding: 46px 28px;
 }
 .library-heading {
@@ -205,28 +220,39 @@
   font-size: 12px;
 }
 .library-empty {
-  text-align: center;
-  padding: 60px 20px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 64px 20px;
   border: 1px dashed #bbc9c1;
   border-radius: 8px;
   color: var(--muted);
 }
-.library-empty > i {
-  font-size: 36px;
-  color: var(--green);
+.library-empty p {
+  margin: 0;
 }
-.library-empty h2 {
-  font-size: 19px;
-  color: #354441;
-  margin-top: 18px;
+.trip-library-page .library-first-trip {
+  padding: 14px 26px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.trip-library-page .library-first-trip:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px #386d7033;
 }
 .library-footer {
   display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
   border-top: 1px solid var(--line);
-  margin-top: 42px;
+  margin-top: auto;
   padding-top: 20px;
   color: var(--muted);
   font-size: 11px;
@@ -357,14 +383,79 @@
     grid-template-columns: 1fr;
     gap: 14px;
   }
-  .library-footer {
-    flex-direction: column;
-    gap: 16px;
-  }
   .library-dialog {
     padding: 18px;
   }
   .trip-card {
     padding: 18px;
   }
+}
+.library-drop-zone {
+  position: relative;
+  min-height: 160px;
+  margin-bottom: 42px;
+}
+.library-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 2px dashed var(--green);
+  border-radius: 8px;
+  background: #eaf2f0e6;
+  pointer-events: none;
+}
+.library-drop-overlay > div {
+  color: var(--green);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+.trip-library-page input.library-import-name {
+  font-size: 22px;
+  font-weight: 600;
+  padding: 10px 12px;
+  margin: 4px 0 10px;
+}
+.library-import-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+  color: var(--muted);
+}
+.library-import-stats i {
+  color: var(--green);
+}
+.library-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 7px;
+}
+.library-footer-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+}
+.library-footer-links a:hover {
+  text-decoration: underline;
+}
+.library-footer-links .dot {
+  color: #b5c0bd;
+}
+.library-sponsor i {
+  color: #d6453d;
+}
+.library-zoziologie {
+  font-weight: 600;
+}
+.library-zoziologie img {
+  height: 14px;
 }

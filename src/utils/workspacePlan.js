@@ -169,7 +169,7 @@ export const validatePlanSize = (plan) => {
   const bytes = new TextEncoder().encode(JSON.stringify(plan)).length;
   if (bytes > 900 * 1024) {
     throw new Error(
-      `This itinerary is ${Math.ceil(bytes / 1024)} KiB; cloud autosave supports plans up to 900 KiB. Your device edits are kept; download a backup from My trips.`,
+      `This itinerary is ${Math.ceil(bytes / 1024)} KiB; cloud autosave supports plans up to 900 KiB. Your device edits are kept; export the trip (.ebirdtrip) from My trips.`,
     );
   }
 };

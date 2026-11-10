@@ -242,21 +242,26 @@ try {
   });
   await rawCard.locator('summary').click();
   const backupDownload = libraryPage.waitForEvent('download');
-  await rawCard.getByRole('button', { name: 'Download backup', exact: true }).click();
+  await rawCard.getByRole('button', { name: 'Export trip (.ebirdtrip)', exact: true }).click();
   const backupPath = await (await backupDownload).path();
-  await libraryPage.getByRole('button', { name: 'Import backup', exact: true }).click();
-  await libraryPage.locator('#trip-archive-input').setInputFiles({
+  await libraryPage.locator('#trip-file-picker').setInputFiles({
     name: 'invalid.json',
     mimeType: 'application/json',
     buffer: Buffer.from('{"unrelated":true}'),
   });
   await libraryPage.getByRole('alert').waitFor();
   assert.equal(
-    await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).count(),
+    await libraryPage
+      .locator('dialog[open]')
+      .getByRole('button', { name: 'Import trip', exact: true })
+      .count(),
     0,
   );
   await libraryPage.locator('#trip-archive-input').setInputFiles(backupPath);
-  await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).click();
+  await libraryPage
+    .locator('dialog[open]')
+    .getByRole('button', { name: 'Import trip', exact: true })
+    .click();
   await libraryPage.getByRole('link', { name: 'My trips', exact: true }).waitFor();
   await libraryPage.getByRole('link', { name: 'My trips', exact: true }).click();
   await until(
@@ -314,13 +319,15 @@ try {
       },
     ],
   };
-  await libraryPage.getByRole('button', { name: 'Import backup', exact: true }).click();
-  await libraryPage.locator('#trip-archive-input').setInputFiles({
+  await libraryPage.locator('#trip-file-picker').setInputFiles({
     name: 'old.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(older)),
   });
-  await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).click();
+  await libraryPage
+    .locator('dialog[open]')
+    .getByRole('button', { name: 'Import trip', exact: true })
+    .click();
   await libraryPage
     .getByRole('heading', { name: 'Add eBird data to start planning', exact: true })
     .waitFor();
@@ -384,9 +391,11 @@ try {
   await until(async () => (await state(libraryPage)).visits.length === 1, 'quota fallback editing');
   assert.equal((await state(libraryPage)).sync.cloudId, '');
   await libraryPage.getByRole('link', { name: 'My trips', exact: true }).click();
-  await libraryPage.getByRole('button', { name: 'Import backup', exact: true }).click();
-  await libraryPage.locator('#trip-archive-input').setInputFiles(backupPath);
-  await libraryPage.getByRole('button', { name: 'Import trip', exact: true }).click();
+  await libraryPage.locator('#trip-file-picker').setInputFiles(backupPath);
+  await libraryPage
+    .locator('dialog[open]')
+    .getByRole('button', { name: 'Import trip', exact: true })
+    .click();
   await libraryPage
     .getByRole('alert')
     .filter({ hasText: 'Your cloud allowance is full' })
@@ -822,7 +831,7 @@ try {
     .filter({ has: cloudLibraryPage.getByRole('heading', { name: 'Oman test', exact: true }) });
   await cloudCard.locator('summary').click();
   const cloudBackupDownload = cloudLibraryPage.waitForEvent('download');
-  await cloudCard.getByRole('button', { name: 'Download backup', exact: true }).click();
+  await cloudCard.getByRole('button', { name: 'Export trip (.ebirdtrip)', exact: true }).click();
   const cloudBackup = JSON.parse(
     gunzipSync(await readFile(await (await cloudBackupDownload).path())).toString(),
   );
