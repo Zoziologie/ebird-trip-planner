@@ -40,6 +40,7 @@ import { readTripArchive, restoreTripArchive } from '../utils/tripData';
 import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
 import { uniqueTripName } from '../utils/tripNames';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
+import AppAlert from '../components/AppAlert.vue';
 import zoziologieLogo from '../assets/zoziologie-logo.svg';
 import { tripDates } from '../utils/tripDates';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
@@ -513,15 +514,19 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
-      <p
+      <AppAlert
         v-if="error && !createDialog?.open && !removeDialog?.open"
-        class="library-error"
-        role="alert"
+        tone="danger"
+        class="library-alert"
+        @close="error = ''"
+        >{{ error }}</AppAlert
       >
-        {{ error }}
-      </p>
-      <p v-if="status" class="library-notice" role="status">{{ status }}</p>
-      <p v-if="cloudError" class="library-error" role="alert">{{ cloudError }}</p>
+      <AppAlert v-if="status" tone="success" class="library-alert" @close="status = ''">{{
+        status
+      }}</AppAlert>
+      <AppAlert v-if="cloudError" tone="danger" class="library-alert" @close="cloudError = ''">{{
+        cloudError
+      }}</AppAlert>
       <div
         class="library-drop-zone"
         :class="{ dragging }"
@@ -670,7 +675,9 @@ onBeforeUnmount(() => {
           <i aria-hidden="true" class="bi bi-x-lg"></i>
         </button>
       </div>
-      <p v-if="error" class="library-error" role="alert">{{ error }}</p>
+      <AppAlert v-if="error" tone="danger" class="library-alert" @close="error = ''">{{
+        error
+      }}</AppAlert>
       <template v-if="mode === 'import' && (importing || pendingImport)"
         ><label for="new-trip-name" class="visually-hidden">Trip name</label
         ><input
@@ -749,7 +756,9 @@ onBeforeUnmount(() => {
               : 'The trip is exported as an .ebirdtrip file before removal. Any cloud version stays available. Keep that file to restore device-only edits.'
           }}
         </p>
-        <p v-if="error" class="library-error" role="alert">{{ error }}</p>
+        <AppAlert v-if="error" tone="danger" class="library-alert" @close="error = ''">{{
+          error
+        }}</AppAlert>
         <div class="library-actions">
           <button :disabled="busy" @click="removeDialog.close()">Cancel</button
           ><button :disabled="busy" @click="remove">

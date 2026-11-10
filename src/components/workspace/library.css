@@ -267,16 +267,14 @@
 .library-footer form {
   margin-top: 12px;
 }
-.library-error,
-.library-notice {
-  padding: 10px 12px;
-  border-radius: 5px;
-  background: #fff4e8;
-  color: #825022;
+.library-alert {
+  margin-bottom: 14px;
 }
-.library-notice {
-  background: var(--tint);
-  color: var(--green);
+/* Inline validation messages (e.g. duplicate name) use the alert danger colours, without a box. */
+.library-error {
+  margin: -6px 0 12px;
+  color: #873a33;
+  font-size: 12px;
 }
 .library-dialog {
   width: min(600px, calc(100vw - 28px));

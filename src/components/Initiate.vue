@@ -83,24 +83,29 @@
         </div>
 
         <!-- Success message - only after raw data is loaded -->
-        <div
-          v-if="loadedRecordCount > 0 && !isImporting && !hasError"
-          class="alert alert-success mt-2 py-1"
+        <AppAlert
+          v-if="loadedRecordCount > 0 && !isImporting && !hasError && !noticeHidden"
+          tone="success"
+          class="mt-2"
+          @close="noticeHidden = true"
         >
-          <i class="bi bi-check-circle-fill me-2"></i>
           <strong>Success!</strong>
           {{ readingFileStatus }}
-        </div>
+        </AppAlert>
 
         <!-- Error message -->
-        <div v-if="hasError && !saveStatus" class="alert alert-danger mt-2">
-          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <AppAlert
+          v-if="hasError && !saveStatus && !noticeHidden"
+          tone="danger"
+          class="mt-2"
+          @close="noticeHidden = true"
+        >
           <strong>Processing failed!</strong>
           {{
             readingFileStatus ||
             'An error occurred while processing your file. Please check the file format and try again.'
           }}
-        </div>
+        </AppAlert>
       </div>
     </li>
   </ol>
@@ -228,13 +233,10 @@
   </div>
   <div class="row mt-3" v-if="saveStatus">
     <div class="col">
-      <div
-        :class="[
-          'alert',
-          hasError ? 'alert-danger' : isProcessing ? 'alert-info' : 'alert-success',
-          'py-2',
-          'mb-0',
-        ]"
+      <AppAlert
+        :tone="hasError ? 'danger' : isProcessing ? 'info' : 'success'"
+        :dismissible="!isProcessing"
+        @close="saveStatus = ''"
       >
         {{ saveStatus }}
         <template v-if="isProcessing">
@@ -263,13 +265,14 @@
             <span>{{ processingElapsed }}</span>
           </div>
         </template>
-      </div>
+      </AppAlert>
     </div>
   </div>
 </template>
 
 <script>
 import { nextTick, onBeforeUnmount, ref, reactive, shallowRef, watch } from 'vue';
+import AppAlert from './AppAlert.vue';
 import JSZip from 'jszip';
 import {
   taxonomyByScientificName as taxonomy_sci,
@@ -283,6 +286,7 @@ import {
 } from '../utils/ebdImport';
 
 export default {
+  components: { AppAlert },
   emits: ['busy'],
   props: {
     canCreate: { type: Boolean, default: true },
@@ -304,6 +308,7 @@ export default {
     const importPhase = ref('');
     const importElapsed = ref('0:00');
     const hasError = ref(false);
+    const noticeHidden = ref(false);
     const loadedRecordCount = ref(0);
     const loadedChecklists = shallowRef([]);
 
@@ -446,6 +451,7 @@ export default {
       clearLoadedResults();
       saveStatus.value = '';
       isImporting.value = true;
+      noticeHidden.value = false;
       importPhase.value = 'Opening files';
       readingFileProgress.value = 0;
       readingFileStatus.value = 'Starting file reading...';
@@ -822,6 +828,7 @@ export default {
       importPhase,
       importElapsed,
       hasError,
+      noticeHidden,
       checklists,
       loadedRecordCount,
       isProcessing,

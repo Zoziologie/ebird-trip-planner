@@ -38,6 +38,7 @@ import { restoreTripArchive } from '../utils/tripData';
 import { decodeTripArchive } from '../utils/tripArchive';
 import TripWorkspaceView from '../components/TripWorkspaceView.vue';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
+import AppAlert from '../components/AppAlert.vue';
 import { taxonomyByCode } from '../utils/taxonomy';
 import { workspaceModel } from '../utils/workspaceModel';
 import { mergePlans, samePlan } from '../utils/workspacePlan';
@@ -120,6 +121,7 @@ const visitorPlan = shallowRef(null);
 const state = ref(null);
 const recoveries = ref([]);
 const recovery = ref(null);
+const recoveryNoticeHidden = ref(false);
 const sharing = ref(false);
 // Both dialogs open as real modals so they get the shared blurred backdrop and Escape closes them.
 const shareDialog = ref(null),
@@ -485,9 +487,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="workspace-page d-flex flex-column flex-grow-1 overflow-hidden">
-    <div v-if="error" class="alert alert-warning m-2" role="alert">
-      {{ error }} <button class="btn btn-sm btn-outline-secondary" @click="load">Retry</button>
-    </div>
+    <AppAlert v-if="error" tone="danger" class="m-2" @close="error = ''">
+      {{ error }} <button class="btn btn-link btn-sm" @click="load">Retry</button>
+    </AppAlert>
     <section v-if="privateTrip" class="p-4" role="alert">
       <h1 class="h5">This trip is private</h1>
       <template v-if="cloudUser">
@@ -534,7 +536,12 @@ onBeforeUnmount(() => {
         <Initiate :create-trip="addDataset" submit-label="Add eBird data" />
       </section>
       <template v-else-if="selectedTripId && localPlan && model">
-        <div v-if="recoveries.length" class="alert alert-warning m-2 py-2" role="status">
+        <AppAlert
+          v-if="recoveries.length && !recoveryNoticeHidden"
+          tone="warning"
+          class="m-2"
+          @close="recoveryNoticeHidden = true"
+        >
           Device edits were preserved in {{ recoveries.length }} recovery
           {{ recoveries.length === 1 ? 'copy' : 'copies' }}.
           <button
@@ -545,7 +552,7 @@ onBeforeUnmount(() => {
           >
             Review {{ new Date(entry.createdAt).toLocaleString() }}
           </button>
-        </div>
+        </AppAlert>
         <TripWorkspaceView
           ref="workspaceView"
           :key="contentKey"
