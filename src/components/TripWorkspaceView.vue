@@ -355,10 +355,10 @@ defineExpose({
               </div>
               <div class="probability-filters">
                 <label
-                  >Cum. Trip (max)
+                  >Whole trip (max)
                   <input
                     id="max-trip"
-                    aria-label="Maximum cumulative trip probability"
+                    aria-label="Maximum whole-trip chance"
                     type="range"
                     min="0"
                     max="1"
@@ -366,10 +366,10 @@ defineExpose({
                     value=".95"
                   /><output id="max-trip-label">95%</output></label
                 ><label
-                  ><span id="min-rate-name">Location (min)</span
+                  ><span id="min-rate-name">This stop (min)</span
                   ><input
                     id="min-rate"
-                    aria-label="Minimum location or average trip rate"
+                    aria-label="Minimum reporting rate at this stop or on average"
                     type="range"
                     min="0"
                     max="1"

@@ -1795,9 +1795,6 @@
 .trip-workspace-ui .mobile .expected-summary {
   bottom: -80px;
 }
-.trip-workspace-ui .mobile .taxon-cell {
-  display: none;
-}
 .trip-workspace-ui .mobile .species-heading {
   gap: 8px;
 }
@@ -1876,9 +1873,6 @@
   align-self: center;
 }
 
-.trip-workspace-ui .mobile #species-panel.planning th:first-child {
-  display: none;
-}
 .trip-workspace-ui .mobile .expected-summary {
   bottom: 65px;
 }
@@ -2118,4 +2112,28 @@
 }
 .trip-workspace-ui #report-status:empty {
   display: none;
+}
+/* Species table: names left, every numeric column (header and values) right-aligned. */
+.trip-workspace-ui .species-table-scroll th,
+.trip-workspace-ui .species-table-scroll td {
+  text-align: left;
+}
+.trip-workspace-ui .species-table-scroll th.num,
+.trip-workspace-ui .species-table-scroll td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.trip-workspace-ui #species-panel td:first-child {
+  color: inherit;
+}
+.trip-workspace-ui .mobile #species-panel td.species-cell {
+  white-space: normal;
+  min-width: 120px;
+}
+.trip-workspace-ui .mobile #species-panel td.species-cell .species-name {
+  text-align: left;
+}
+.trip-workspace-ui .mobile #species-panel th,
+.trip-workspace-ui .mobile #species-panel td {
+  padding-inline: 4px;
 }

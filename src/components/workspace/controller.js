@@ -1175,7 +1175,9 @@ export function mountWorkspace(root, model, options) {
         .filter(Boolean)
         .sort((a, b) => a.name.localeCompare(b.name));
       $('species-columns').innerHTML =
-        '<tr><th>Species</th><th>' + (planned ? 'Interest' : 'Individuals / lists') + '</th></tr>';
+        '<tr><th>Species</th><th class="num">' +
+        (planned ? 'Interest' : 'Individuals / lists') +
+        '</th></tr>';
       $('species-rows').innerHTML = items
         .map((t) => {
           const v = a.counts.get(t.code),
@@ -1188,7 +1190,7 @@ export function mountWorkspace(root, model, options) {
             escape(t.name) +
             '</strong><span class="latin"> ' +
             escape(t.latin) +
-            '</span></td><td>' +
+            '</span></td><td class="num">' +
             (planned
               ? '<i class="bi bi-star-fill target-star"></i>'
               : total
@@ -1217,7 +1219,7 @@ export function mountWorkspace(root, model, options) {
     const all = planningSpecies(),
       maximum = Number($('max-trip').value),
       minimum = Number($('min-rate').value);
-    $('min-rate-name').textContent = stop ? 'Location (min)' : 'Average trip (min)';
+    $('min-rate-name').textContent = stop ? 'This stop (min)' : 'Avg. stop (min)';
     $('max-trip-label').textContent = Math.round(maximum * 100) + '%';
     $('min-rate-label').textContent = Math.round(minimum * 100) + '%';
     // Only offer the filters that can match something here; hidden ones are cleared.
@@ -1258,31 +1260,64 @@ export function mountWorkspace(root, model, options) {
               ? a.order - b.order
               : (a[sort] ?? 0) - (b[sort] ?? 0)) || a.name.localeCompare(b.name),
     );
+    // Numeric columns are right-aligned with their headers; titles explain each value.
     const columns = [
-      ['taxon', 'Tax.'],
-      ...(stop ? [['interest', '★']] : []),
-      ['name', 'Species'],
-      ...(stop ? [['rank', 'Top']] : []),
-      [stop ? 'location' : 'avg', stop ? 'Location' : 'Avg. Trip'],
-      ['cumulative', 'Cum. Trip'],
-      ...(!stop ? [['overall', 'EBD']] : []),
+      ...(stop ? [{ key: 'interest', label: '★', title: 'Species of interest at this stop' }] : []),
+      { key: 'taxon', label: 'Species', title: 'Sort in eBird taxonomic order' },
+      ...(stop
+        ? [
+            {
+              key: 'rank',
+              label: 'Rank',
+              title: 'Where this stop ranks among your planned stops for the species (1 = best)',
+              num: true,
+            },
+          ]
+        : []),
+      stop
+        ? {
+            key: 'location',
+            label: 'This stop',
+            title: 'Reporting rate on complete eBird checklists at this stop',
+            num: true,
+          }
+        : {
+            key: 'avg',
+            label: 'Avg. stop',
+            title: 'Average reporting rate across your planned birding stops',
+            num: true,
+          },
+      {
+        key: 'cumulative',
+        label: 'Whole trip',
+        title: 'Chance of recording the species at least once over all planned visits',
+        num: true,
+      },
+      ...(!stop
+        ? [
+            {
+              key: 'overall',
+              label: 'Dataset',
+              title: 'Reporting rate across every checklist in the loaded eBird data',
+              num: true,
+            },
+          ]
+        : []),
     ];
     $('species-columns').innerHTML =
       '<tr>' +
       columns
         .map(
-          ([key, label]) =>
-            '<th><button data-sort="' +
-            key +
+          (c) =>
+            '<th' +
+            (c.num ? ' class="num"' : '') +
+            '><button data-sort="' +
+            c.key +
             '" title="' +
-            (key === 'rank'
-              ? 'Rank among planned stops'
-              : key === 'cumulative'
-                ? 'Effort-adjusted probability across planned visits'
-                : label) +
+            c.title +
             '">' +
-            label +
-            (sort === key ? (speciesDirection === 1 ? ' ↑' : ' ↓') : '') +
+            c.label +
+            (sort === c.key ? (speciesDirection === 1 ? ' ↑' : ' ↓') : '') +
             '</button></th>',
         )
         .join('') +
@@ -1295,7 +1330,7 @@ export function mountWorkspace(root, model, options) {
             if (speciesSort === b.dataset.sort) speciesDirection *= -1;
             else {
               speciesSort = b.dataset.sort;
-              speciesDirection = ['name', 'taxon', 'rank'].includes(speciesSort) ? 1 : -1;
+              speciesDirection = ['taxon', 'rank', 'interest'].includes(speciesSort) ? 1 : -1;
             }
             renderSpecies();
           }),
@@ -1303,12 +1338,10 @@ export function mountWorkspace(root, model, options) {
     $('species-rows').innerHTML =
       filtered
         .map(
-          (t, i) =>
+          (t) =>
             '<tr class="' +
             (t.interest ? 'interest-row' : '') +
-            '"><td class="taxon-cell">' +
-            (i + 1) +
-            '</td>' +
+            '">' +
             (stop
               ? '<td><button class="interest-toggle" aria-label="Toggle interest for ' +
                 escape(t.name) +
@@ -1320,7 +1353,7 @@ export function mountWorkspace(root, model, options) {
                 (t.interest ? '-fill target-star' : '') +
                 '"></i></button></td>'
               : '') +
-            '<td><button class="species-name" data-map="' +
+            '<td class="species-cell"><button class="species-name" data-map="' +
             t.code +
             '">' +
             escape(t.name) +
@@ -1335,13 +1368,13 @@ export function mountWorkspace(root, model, options) {
                   ? '<i class="bi bi-car-front-fill lifer-icon" title="Not yet on trip report"></i>'
                   : '') +
             '</td>' +
-            (stop ? '<td>' + t.rank + '</td>' : '') +
-            '<td>' +
+            (stop ? '<td class="num">' + t.rank + '</td>' : '') +
+            '<td class="num">' +
             percent(stop ? t.location : t.avg) +
-            '</td><td>' +
+            '</td><td class="num">' +
             percent(t.cumulative) +
             '</td>' +
-            (!stop ? '<td>' + percent(t.overall) + '</td>' : '') +
+            (!stop ? '<td class="num">' + percent(t.overall) + '</td>' : '') +
             '</tr>',
         )
         .join('') || '<tr><td colspan="7">No species match these filters.</td></tr>';
