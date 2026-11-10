@@ -2,7 +2,7 @@
 .trip-workspace-ui {
   --green: #386d70;
   --stop: #386d70;
-  --selected: #386d70;
+  --selected: #e0a12a;
   --report: #3476a6;
   --line: #dce3df;
   --muted: #687573;
@@ -1379,3 +1379,39 @@
 .trip-workspace-ui #settings-dialog .list-upload > button {
   grid-row: 1 / span 2;
 }
+
+/* The selected stop is gold so it never reads as part of its green area circle. */
+.trip-workspace-ui .stop-symbol.selected,
+.trip-workspace-ui .stop-row .stop-symbol.selected,
+.trip-workspace-ui .stop-symbol.past.selected {
+  background: var(--selected);
+  border-color: white;
+  color: white;
+  outline: 0;
+  box-shadow:
+    0 0 0 2px var(--selected),
+    0 2px 8px #3a2a0640;
+}
+.trip-workspace-ui .mapboxgl-marker.stop-symbol.selected {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  font-size: 15px;
+  z-index: 2;
+}
+.trip-workspace-ui .stop-symbol.selected:hover {
+  background: #c98d1c;
+}
+/* The selected row's type picker is the same gold marker as on the map. */
+.trip-workspace-ui .type-field {
+  background: var(--selected);
+  border: 2px solid white;
+  box-shadow:
+    0 0 0 2px var(--selected),
+    0 2px 8px #3a2a0640;
+  margin: 2px;
+}
+.trip-workspace-ui .type-field:hover {
+  background: #c98d1c;
+}
+
