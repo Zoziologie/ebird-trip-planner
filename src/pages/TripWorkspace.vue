@@ -610,11 +610,7 @@ onBeforeUnmount(() => {
             >
               Enable cloud autosave
             </button>
-            <button
-              v-if="!cloudUser && cloudConfigured"
-              class="edit-only"
-              @click="run(() => signInCloud())"
-            >
+            <button v-if="!cloudUser && cloudConfigured" @click="run(() => signInCloud())">
               Sign in to sync
             </button>
             <button v-if="state?.cloudId" class="edit-only" :disabled="busy" @click="sync.flush()">
