@@ -1528,7 +1528,8 @@ export function mountWorkspace(root, model, options) {
     $('report-open').hidden = writable() || !reportId;
     $('report-layer-status').textContent =
       a.lists.length + ' report checklists · nearby pins clustered';
-    $('report-layer').disabled = !a.lists.length;
+    // Offer the report overlay only when the trip report has checklists to show.
+    $('report-layer').closest('label').hidden = !a.lists.length;
     renderReportSummary();
   }
   function renderAccess() {

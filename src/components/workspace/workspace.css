@@ -2140,3 +2140,6 @@
 .trip-workspace-ui .mobile #species-panel td {
   padding-inline: 4px;
 }
+.trip-workspace-ui .report-layer-option[hidden] {
+  display: none;
+}
