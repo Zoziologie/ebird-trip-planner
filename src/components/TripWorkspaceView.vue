@@ -46,6 +46,10 @@ watch(
   () => controller?.setMetadata(props.plan),
 );
 onBeforeUnmount(() => controller?.destroy());
+defineExpose({
+  getPlan: () => controller?.getPlan(),
+  replacePlan: (model) => controller?.replacePlan(model),
+});
 </script>
 
 <template>

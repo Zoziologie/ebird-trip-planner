@@ -1,5 +1,5 @@
 import { db } from '../data/db';
-import { buildWorkspacePlan, workspaceVisits, samePlan } from './workspacePlan';
+import { buildWorkspacePlan, workspaceVisits, samePlan, mergePlans } from './workspacePlan';
 
 export const readWorkspacePlan = (tripId) =>
   db.transaction('r', db.trips, db.visits, async () =>
@@ -44,13 +44,15 @@ export const applyWorkspacePlan = async (tripId, plan) => {
     await db.visits.bulkPut(workspaceVisits({ ...plan, stops: changed }, tripId, previous, now));
 };
 
-// The caller supplies server state; local preservation and replacement are atomic.
+// The caller supplies server state. Device edits since the last sync are merged into
+// it; only fields both sides changed are kept aside as a recovery copy.
 export const acceptCloudPlan = (tripId, cloud) =>
   db.transaction('rw', db.trips, db.visits, db.workspaceSync, db.workspaceRecovery, async () => {
     const state = await db.workspaceSync.get(tripId);
     const local = await readWorkspacePlan(tripId);
+    const { plan, conflicts } = mergePlans(state.basePlan, local, cloud.plan);
     let recoveryId = null;
-    if (!samePlan(local, state.basePlan) && !samePlan(local, cloud.plan)) {
+    if (conflicts && !samePlan(local, state.basePlan)) {
       recoveryId = await db.workspaceRecovery.add({
         tripId,
         createdAt: Date.now(),
@@ -59,7 +61,8 @@ export const acceptCloudPlan = (tripId, cloud) =>
         plan: local,
       });
     }
-    await applyWorkspacePlan(tripId, cloud.plan);
+    const changed = !samePlan(plan, local);
+    if (changed) await applyWorkspacePlan(tripId, plan);
     await db.workspaceSync.put({
       ...state,
       revision: cloud.revision,
@@ -67,7 +70,8 @@ export const acceptCloudPlan = (tripId, cloud) =>
       pending: null,
       lastSavedAt: Date.now(),
     });
-    return recoveryId;
+    // `unpublished`: merged device edits still need to be committed to the cloud.
+    return { recoveryId, changed, unpublished: !samePlan(plan, cloud.plan) };
   });
 
 export const acknowledgePlan = (tripId, cloud) =>

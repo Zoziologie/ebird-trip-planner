@@ -901,6 +901,31 @@ try {
     }),
     undefined,
   );
+  // Edits to different fields of one stop merge on both devices without a recovery copy,
+  // and the collaborator's open editor shows the result live, without a reload.
+  await chooseAlpha(page);
+  await chooseAlpha(editor);
+  await openNotes(page);
+  await openNotes(editor);
+  const duration = (target) => target.getByLabel('Duration hours', { exact: true });
+  const notes = (target) => target.getByRole('textbox', { name: 'Stop notes', exact: true });
+  await ownerContext.setOffline(true);
+  await notes(page).fill('Owner merged note');
+  await duration(editor).fill('2.5');
+  await duration(editor).press('Tab');
+  await until(
+    async () => (await state(editor)).sync.basePlan.stops[0].durationMinutes === 150,
+    'collaborator duration saved',
+  );
+  await ownerContext.setOffline(false);
+  await until(async () => {
+    const [stop] = (await state(editor)).sync.basePlan.stops;
+    return stop.note === 'Owner merged note' && stop.durationMinutes === 150;
+  }, 'merged commit from both devices');
+  await until(async () => (await notes(editor).inputValue()) === 'Owner merged note', 'live note');
+  await until(async () => (await duration(page).inputValue()) === '2.5', 'merged duration');
+  assert.equal((await state(page)).recoveries.length, 0);
+  assert.equal((await state(editor)).recoveries.length, 0);
   await ownerContext.setOffline(true);
   await chooseAlpha(page);
   await openNotes(page);
@@ -924,7 +949,10 @@ try {
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download recovery copy', exact: true }).click();
   assert.match((await downloadPromise).suggestedFilename(), /trip-recovery/);
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Recovery copy' })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
   // A lost acknowledgement must not produce a false recovery or duplicate revision.
   await page.evaluate(async () => {
     await window.workspaceHarnessReady;
@@ -1000,7 +1028,7 @@ try {
   assert.deepEqual(errors, []);
   passed = true;
   console.log(
-    'Workspace browser flow passed: migration, editor autosave, species view, offline edit/reload/reconnect, immutable dataset, visitor access, co-traveler conflict recovery, download and lost acknowledgements.',
+    'Workspace browser flow passed: migration, editor autosave, species view, offline edit/reload/reconnect, immutable dataset, visitor access, concurrent edit merge and live update, co-traveler conflict recovery, download and lost acknowledgements.',
   );
 } catch (error) {
   console.error(error);

@@ -40,26 +40,46 @@ import TripWorkspaceView from '../components/TripWorkspaceView.vue';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import { taxonomyByCode } from '../utils/taxonomy';
 import { workspaceModel } from '../utils/workspaceModel';
+import { mergePlans, samePlan } from '../utils/workspacePlan';
 import { tripTimeZone } from '../utils/tripTimeZone';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
 const model = shallowRef(null);
+const workspaceView = ref(null);
 let writes = Promise.resolve();
-const loadModel = async (plan, tripId) => {
+// The device plan the editor's in-memory stops were last in step with. Sync can merge a
+// collaborator's commit into IndexedDB underneath the editor; saves then merge against it
+// instead of overwriting the collaborator's stops with the editor's stale copy.
+let editorBase = null;
+const buildModel = async (plan, tripId) => {
   const [ebd, comments, report] = await Promise.all([
     tripId ? db.ebd.get(tripId) : null,
     tripId ? db.comments.get(tripId) : null,
     plan.reportId ? db.workspaceReports.get(plan.reportId) : null,
   ]);
-  model.value = workspaceModel(plan, ebd, comments?.entries || [], report, taxonomyByCode);
+  return workspaceModel(plan, ebd, comments?.entries || [], report, taxonomyByCode);
+};
+const loadModel = async (plan, tripId) => {
+  model.value = await buildModel(plan, tripId);
+  editorBase = tripId ? plan : null;
 };
 const savePlan = (plan) => {
   const tripId = selectedTripId.value;
+  const base = editorBase;
   writes = writes
     .catch(() => {})
     .then(() =>
       db.transaction('rw', db.trips, db.visits, async () => {
-        await applyWorkspacePlan(tripId, plan);
+        const current = await readWorkspacePlan(tripId);
+        const behind = base && !samePlan(current, base);
+        // The editor's own edit wins over anything merged in since it last refreshed.
+        await applyWorkspacePlan(
+          tripId,
+          behind ? mergePlans(base, plan, current, { prefer: 'local' }).plan : plan,
+        );
+        // Until the editor refreshes, its stops still match what it sent, not the merge.
+        editorBase = behind ? plan : await readWorkspacePlan(tripId);
+        if (behind) workspaceReload.value++;
       }),
     );
   return writes.catch((failure) => {
@@ -129,7 +149,7 @@ const owner = computed(
 );
 const shareLink = computed(() => (state.value?.cloudId ? workspaceUrl(state.value.cloudId) : ''));
 const denied = (failure) => failure?.code === 'permission-denied';
-const contentKey = computed(() => `${selectedTripId.value}:${workspaceReload.value}`);
+const contentKey = computed(() => selectedTripId.value);
 const download = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -390,10 +410,31 @@ const exportRecovery = (entry) =>
     }),
     `trip-recovery-${entry.id}.json`,
   );
-watch(workspaceReload, async () => {
-  model.value = null;
-  await loadModel(await readWorkspacePlan(selectedTripId.value), selectedTripId.value);
+// Show merged collaborator changes in place, keeping the map, selection and open panels.
+let refreshing = Promise.resolve();
+watch(workspaceReload, () => {
+  refreshing = refreshing.then(async () => {
+    const tripId = selectedTripId.value;
+    if (!tripId || visitor.value) return;
+    await writes.catch(() => {});
+    const plan = await readWorkspacePlan(tripId);
+    const view = workspaceView.value;
+    if (view && model.value && plan.reportId === model.value.reportId) {
+      const next = await buildModel(plan, tripId);
+      if (tripId !== selectedTripId.value) return;
+      // Re-read: an edit may have been saved while the model was being built.
+      await writes.catch(() => {});
+      const latest = await readWorkspacePlan(tripId);
+      if (!samePlan(latest, plan)) return refreshAgain();
+      if (!samePlan(view.getPlan(), plan)) view.replacePlan(next);
+      editorBase = plan;
+      return;
+    }
+    model.value = null;
+    await loadModel(plan, tripId);
+  });
 });
+const refreshAgain = () => workspaceReload.value++;
 watch(() => route.fullPath, load);
 // Handle initial auth before onMounted loads, rather than queuing a second download.
 watch(
@@ -496,6 +537,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <TripWorkspaceView
+          ref="workspaceView"
           :key="contentKey"
           :plan="localPlan"
           :model="model"

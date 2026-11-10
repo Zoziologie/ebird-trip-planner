@@ -5,7 +5,11 @@ import { db } from '../data/db';
 import { cloudUser } from './cloudTrips';
 import { samePlan } from '../utils/workspacePlan';
 import { readWorkspacePlan, acceptCloudPlan, acknowledgePlan } from '../utils/workspaceLocal';
-import { getWorkspaceCloud, publishWorkspacePlan } from '../utils/workspaceCloud';
+import {
+  getWorkspaceCloud,
+  publishWorkspacePlan,
+  watchWorkspaceCloud,
+} from '../utils/workspaceCloud';
 import { workspaceReload } from './workspaceEvents';
 export { workspaceReload } from './workspaceEvents';
 
@@ -29,6 +33,7 @@ const retain = (entry) => {
 
 // One coordinator per mounted workspace. Web Locks serialize tabs on this device;
 // cloud transactions serialize devices. IndexedDB remains the offline working copy.
+// A live listener brings collaborators' commits in, and edits merge per stop and field.
 export const watchWorkspaceSync = (tripId) => {
   if (coordinators.has(tripId)) return retain(coordinators.get(tripId));
   const status = (message) => {
@@ -38,9 +43,43 @@ export const watchWorkspaceSync = (tripId) => {
   let stopped = false;
   let running = false;
   let again = false;
+  let live = null;
+  const unwatch = () => {
+    live?.stop.then((stop) => stop?.());
+    live = null;
+  };
+  // Snapshots only wake the coordinator; the locked sync below does the merging.
+  const watch = (cloudId) => {
+    if (live?.cloudId === cloudId) return;
+    unwatch();
+    const stop = watchWorkspaceCloud(
+      cloudId,
+      async (cloud) => {
+        const state = await db.workspaceSync.get(tripId);
+        if (state?.cloudId === cloudId && cloud.revision !== state.revision) flush();
+      },
+      () => {
+        // Access removed or rules changed: fall back to polling until the next sync.
+        if (live?.cloudId === cloudId) live = null;
+      },
+    ).catch(() => null);
+    live = { cloudId, stop };
+  };
+  const merge = async (cloud) => {
+    const result = await acceptCloudPlan(tripId, cloud);
+    if (result.changed) workspaceReload.value++;
+    // Merged device edits go out as the next commit on top of the collaborator's.
+    if (result.unpublished) again = true;
+    status(
+      result.recoveryId
+        ? 'Merged collaborator changes · overlapping device edits in recovery copies'
+        : 'Saved to cloud',
+    );
+  };
   const sync = async () => {
     const state = await db.workspaceSync.get(tripId);
     if (!state?.cloudId) {
+      unwatch();
       status('Saved on this device');
       return;
     }
@@ -54,9 +93,11 @@ export const watchWorkspaceSync = (tripId) => {
       return;
     }
     if (cloudUser.value?.uid !== state.accountId) {
+      unwatch();
       status('Saved on this device · sign in to sync');
       return;
     }
+    watch(state.cloudId);
     status('Syncing…');
     const cloud = await getWorkspaceCloud(state.cloudId);
     if (!cloud) throw new Error('The shared trip is unavailable. Device changes are kept.');
@@ -66,9 +107,7 @@ export const watchWorkspaceSync = (tripId) => {
       return;
     }
     if (cloud.revision !== state.revision) {
-      await acceptCloudPlan(tripId, cloud);
-      workspaceReload.value++;
-      status('Cloud version opened · check recovery copies for device edits');
+      await merge(cloud);
       return;
     }
     if (samePlan(local, state.basePlan)) {
@@ -84,9 +123,7 @@ export const watchWorkspaceSync = (tripId) => {
       pending.plan,
     );
     if (saved.conflict) {
-      await acceptCloudPlan(tripId, saved);
-      workspaceReload.value++;
-      status('Device edits preserved in recovery copies');
+      await merge(saved);
     } else {
       await acknowledgePlan(tripId, saved);
       status('Saved to cloud');
@@ -131,6 +168,7 @@ export const watchWorkspaceSync = (tripId) => {
     flush,
     stop: () => {
       stopped = true;
+      unwatch();
       clearTimeout(timer);
       clearInterval(interval);
       subscription.unsubscribe();

@@ -566,13 +566,25 @@ export function mountWorkspace(root, model, options) {
       target = back ? redoStack : undoStack;
     if (!writable() || !source.length) return;
     target.push(snapshot());
-    const saved = source.pop();
+    installStops(source.pop());
+    lastDetailStop = 0;
+    renderHistory();
+    renderList();
+    renderEditor();
+    renderSpecies();
+    drawMarkers();
+    drawLayers();
+    queueSave();
+  }
+  function installStops(saved) {
     stops = saved.stops;
     selected = saved.selected;
     routes.clear();
     saved.routes.forEach(([id, r]) => routes.set(id, r));
     checked.clear();
     typingKey = '';
+    planningCache = null;
+    selectionStatsKey = '';
     for (const stop of stops)
       memberships.set(
         stop.id,
@@ -586,14 +598,6 @@ export function mountWorkspace(root, model, options) {
       );
     reportAggregates.clear();
     for (const stop of stops) computeSpatial(stop);
-    renderHistory();
-    lastDetailStop = 0;
-    renderList();
-    renderEditor();
-    renderSpecies();
-    drawMarkers();
-    drawLayers();
-    queueSave();
   }
   $('undo').onclick = () => restoreHistory();
   $('redo').onclick = () => restoreHistory(false);
@@ -2200,6 +2204,31 @@ export function mountWorkspace(root, model, options) {
       renderAccess();
       renderList();
       renderEditor();
+    },
+    // A collaborator's merged changes: swap the stops in place without saving them back.
+    // Undo history predates the merge, so replaying it would revert their edits.
+    replacePlan(next) {
+      for (const item of next.taxa) if (!taxa.has(item.code)) taxa.set(item.code, { ...item });
+      data.start = next.start;
+      data.end = next.end;
+      const nextStops = structuredClone(next.stops);
+      const keep = nextStops.some((s) => s.id === selected);
+      if (!keep) lastDetailStop = 0;
+      installStops({
+        stops: nextStops,
+        routes: nextStops.filter((s) => s.route.geometry).map((s) => [s.id, s.route]),
+        selected: keep
+          ? selected
+          : nextStops.find((s) => s.type === 'Birding')?.id || nextStops[0]?.id || 0,
+      });
+      undoStack.length = 0;
+      redoStack.length = 0;
+      renderHistory();
+      renderList();
+      renderEditor();
+      renderSpecies();
+      drawMarkers();
+      drawLayers();
     },
     destroy() {
       disposed = true;

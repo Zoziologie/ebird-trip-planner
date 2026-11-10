@@ -1,4 +1,10 @@
-import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  getDocFromServer,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { initCloud } from './firebaseCloud';
 import { publicationDecision, validatePlanSize } from './workspacePlan';
 
@@ -12,6 +18,18 @@ export const getWorkspaceCloud = async (id, { legacy = false } = {}) => {
     if (legacy && error.code === 'permission-denied') return null;
     throw error;
   }
+};
+
+// Calls back with each server version of the shared plan; returns the unsubscribe.
+export const watchWorkspaceCloud = async (id, onChange, onError) => {
+  const { database } = await initCloud();
+  return onSnapshot(
+    doc(database, 'workspaces', id),
+    (snapshot) => {
+      if (snapshot.exists() && !snapshot.metadata.fromCache) onChange({ id, ...snapshot.data() });
+    },
+    onError,
+  );
 };
 
 export const createWorkspaceCloud = async (id, datasetRevision, plan, commitId) => {

@@ -66,7 +66,78 @@ export const workspaceVisits = (plan, tripId, previous = [], now = Date.now()) =
     };
   });
 
-export const samePlan = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Stop order is derived (date, then device-local insertion), so it never counts as an edit.
+const canonical = (value) =>
+  Array.isArray(value?.stops)
+    ? { ...value, stops: [...value.stops].sort((a, b) => String(a.id).localeCompare(b.id)) }
+    : value;
+export const samePlan = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+// Fields that only make sense together merge as one unit.
+const STOP_GROUPS = [
+  ['name'],
+  ['type'],
+  ['dateTime'],
+  ['durationMinutes'],
+  ['longitude', 'latitude'],
+  ['radiusMeters'],
+  ['note'],
+  ['targetSpecies'],
+  ['routeGeometryJson', 'routeDistanceM', 'routeDurationS'],
+];
+const PLAN_FIELDS = ['name', 'timeZone', 'reportId'];
+const pick = (item, keys) => JSON.stringify(keys.map((key) => item?.[key]));
+
+// Three-way merge of shared plans. Stops merge by id and field group, so concurrent
+// edits to different stops or fields both survive. When both sides changed the same
+// field, `prefer` wins and the conflict is counted; when one side deleted a stop the
+// other edited, the edited stop is kept.
+export const mergePlans = (base, local, remote, { prefer = 'remote' } = {}) => {
+  if (!base) return { plan: prefer === 'local' ? local : remote, conflicts: 0 };
+  let conflicts = 0;
+  const choose = (keys, b, l, r) => {
+    const [kb, kl, kr] = [pick(b, keys), pick(l, keys), pick(r, keys)];
+    if (kl === kr || kl === kb) return r;
+    if (kr === kb) return l;
+    conflicts++;
+    return prefer === 'local' ? l : r;
+  };
+  const plan = { ...remote };
+  for (const key of PLAN_FIELDS) plan[key] = choose([key], base, local, remote)[key];
+  const byId = (items) => new Map(items.map((stop) => [stop.id, stop]));
+  const [baseStops, localStops, remoteStops] = [base, local, remote].map((p) => byId(p.stops));
+  const merged = new Map();
+  for (const id of new Set([...remoteStops.keys(), ...localStops.keys()])) {
+    const b = baseStops.get(id),
+      l = localStops.get(id),
+      r = remoteStops.get(id);
+    if (!b) {
+      // New on one side; on both only when this device's own commit already landed.
+      merged.set(id, l || r);
+      continue;
+    }
+    if (!l || !r) {
+      // A deletion stands unless the other side edited the stop meanwhile.
+      const kept = l || r;
+      if (!samePlan(kept, b)) {
+        conflicts++;
+        merged.set(id, kept);
+      }
+      continue;
+    }
+    const stop = { ...r };
+    for (const keys of STOP_GROUPS) {
+      const source = choose(keys, b, l, r);
+      for (const key of keys) stop[key] = source[key];
+    }
+    merged.set(id, stop);
+  }
+  // Order matches buildWorkspacePlan; stable ties keep the remote order first.
+  plan.stops = [...merged.values()].sort((a, b) =>
+    String(a.dateTime || '').localeCompare(String(b.dateTime || '')),
+  );
+  return { plan, conflicts };
+};
 
 export const publicationDecision = (current, baseRevision, commitId) => {
   if (current.commitId === commitId) return 'acknowledged';
