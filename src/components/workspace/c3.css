@@ -1415,3 +1415,57 @@
   background: #c98d1c;
 }
 
+/* Stop name: reads as plain text, fits its own width, and only underlines while editing. */
+.trip-workspace-ui .name-row .name-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.trip-workspace-ui .name-row .name-field input,
+.trip-workspace-ui .name-field input {
+  field-sizing: content;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 3ch;
+  height: auto;
+  padding: 2px 1px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  text-overflow: ellipsis;
+}
+.trip-workspace-ui .name-field input:hover {
+  border-bottom: 1px dashed #9db1ab;
+}
+.trip-workspace-ui .name-field input:focus {
+  outline: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--green);
+}
+.trip-workspace-ui .name-row .name-field button,
+.trip-workspace-ui .name-field button {
+  display: none;
+  height: auto;
+  margin: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--green);
+  font-size: 13px;
+}
+.trip-workspace-ui .name-field:focus-within button {
+  display: inline-grid;
+  place-items: center;
+}
+.trip-workspace-ui .name-field button:hover {
+  background: var(--tint);
+}

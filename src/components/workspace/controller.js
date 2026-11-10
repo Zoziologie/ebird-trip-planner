@@ -997,6 +997,8 @@ export function mountWorkspace(root, model, options) {
     list.scrollTop = scroll;
     $('sheet-title').textContent = 'Itinerary';
   }
+  // The name field is only as wide as its text (CSS field-sizing where supported, size otherwise).
+  const fitName = () => ($('name').size = Math.max(6, $('name').value.length + 1));
   function renderEditor() {
     const s = active(),
       bulk = checked.size > 0;
@@ -1039,6 +1041,7 @@ export function mountWorkspace(root, model, options) {
       note: s.note,
     }))
       $(id).value = value;
+    fitName();
     if (writable()) $('stop-extra-body').append($('selection-stats'), $('remove'));
     else root.querySelector('.itinerary').append($('selection-stats'));
     $('type-icon').className = 'bi bi-' + icons[s.type];
@@ -1862,7 +1865,12 @@ export function mountWorkspace(root, model, options) {
     renderEditor();
   };
   $('sheet').onclick = () => toggleSheet(!$('workspace-layout').classList.contains('sheet-open'));
-  $('name').oninput = (e) => change('name', e.target.value);
+  $('name').oninput = (e) => {
+    change('name', e.target.value);
+    fitName();
+  };
+  // Keep the name focused while clicking auto-name, which only shows during name editing.
+  $('auto-name').onmousedown = (e) => e.preventDefault();
   $('type').onchange = (e) => {
     change('type', e.target.value);
     renderEditor();
@@ -1879,6 +1887,7 @@ export function mountWorkspace(root, model, options) {
       ).name,
     );
     $('name').value = active().name;
+    fitName();
   };
   $('target-search').oninput = () => {
     renderTargets();
