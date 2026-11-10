@@ -2,7 +2,31 @@
 
 ## Unreleased
 
+## 2.0.0-beta.4 — 2026-11-10
+
+### Sharing and cloud
+
 - Share a trip with one link that opens for editing or viewing depending on who signs in; sharing changes save immediately and private trips show a sign-in prompt.
+- Merge concurrent edits from collaborators on a shared trip and show them live in the open workspace.
+- Raise the default cloud allowance to three trips and remove in-app capacity requests.
+- Reload once when a new deploy has removed lazily loaded files.
+
+### My trips
+
+- Import an `.ebirdtrip` file by dropping it on the trips area or choosing it with Import trip; the name can be edited while the file is read and key stats show before importing. Backups are now called eBird trips (`.ebirdtrip`).
+- Create a trip in two guided steps with a drop zone for one or several EBD files.
+- Simpler empty state, centred footer with GitHub, Support and Zoziologie links, and a stops icon on trip cards.
+
+### Trip workspace
+
+- The species view shows only the planning list, with filters that appear when usable, one-line expected species and clearer, right-aligned columns that fit on phones.
+- The selected stop is a gold marker on the map and in the itinerary; the stop name field fits its text and shows auto-name only while editing.
+- Day headers show birding and driving time, also in Preview, where Google sign-in is now offered.
+- Header actions stay inline down to phone width, and the Trip-report checklists overlay is hidden when the trip has no report checklists.
+
+### Look and feel
+
+- Every dialog blurs the page behind it, and all alerts share one dismissible style matching the app palette.
 
 ## 2.0.0-beta.3 — 2026-11-03
 
