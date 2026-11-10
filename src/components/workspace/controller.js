@@ -919,17 +919,11 @@ export function mountWorkspace(root, model, options) {
         '<strong>' +
         dayFormatter.format(new Date(day + 'T12:00')) +
         '</strong><span>' +
-        group.length +
-        (group.length === 1 ? ' stop' : ' stops') +
-        (writable()
-          ? ' · ' +
-            Number(birding.toFixed(1)) +
-            'h birding · ' +
-            driveLabel(legs.reduce((sum, r) => sum + r.duration, 0)) +
-            ' driving'
-          : reportCount
-            ? ' · ' + reportCount + ' checklists'
-            : '') +
+        Number(birding.toFixed(1)) +
+        'h birding · ' +
+        driveLabel(legs.reduce((sum, r) => sum + r.duration, 0)) +
+        ' driving' +
+        (!writable() && reportCount ? ' · ' + reportCount + ' checklists' : '') +
         '</span>';
       section.append(head);
       list.append(section);
