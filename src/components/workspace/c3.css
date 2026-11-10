@@ -1221,9 +1221,6 @@
   color: #354441;
   background: var(--paper);
 }
-.trip-workspace-ui #settings-dialog::backdrop {
-  background: #1a302b60;
-}
 .trip-workspace-ui .settings-heading {
   display: flex;
   align-items: center;

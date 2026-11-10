@@ -480,9 +480,6 @@
   color: inherit;
   padding: 25px;
 }
-.trip-workspace-ui dialog::backdrop {
-  background: #163e3755;
-}
 .trip-workspace-ui dialog label {
   margin: 14px 0;
 }

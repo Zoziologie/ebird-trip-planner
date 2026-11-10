@@ -121,6 +121,16 @@ const state = ref(null);
 const recoveries = ref([]);
 const recovery = ref(null);
 const sharing = ref(false);
+// Both dialogs open as real modals so they get the shared blurred backdrop and Escape closes them.
+const shareDialog = ref(null),
+  recoveryDialog = ref(null);
+const syncModal = (dialog, open) => {
+  if (!dialog) return;
+  if (open && !dialog.open) dialog.showModal();
+  else if (!open && dialog.open) dialog.close();
+};
+watch(sharing, (open) => syncModal(shareDialog.value, open));
+watch(recovery, (entry) => syncModal(recoveryDialog.value, Boolean(entry)));
 const sharePublic = ref(false);
 const shareOwnerEmail = ref('');
 const shareEditors = ref([]);
@@ -633,7 +643,12 @@ onBeforeUnmount(() => {
       "
       :message="loadingMessage"
     />
-    <dialog :open="sharing" class="workspace-dialog border rounded shadow" aria-label="Share trip">
+    <dialog
+      ref="shareDialog"
+      class="workspace-dialog border rounded shadow"
+      aria-label="Share trip"
+      @close="sharing = false"
+    >
       <h2 class="h5">Share trip</h2>
       <p class="small text-body-secondary mb-2">
         Everyone gets the same link. People you add below can edit; everyone else can only view it,
@@ -724,8 +739,9 @@ onBeforeUnmount(() => {
       </div>
     </dialog>
     <dialog
-      :open="Boolean(recovery)"
+      ref="recoveryDialog"
       class="workspace-dialog border rounded shadow"
+      @close="recovery = null"
       aria-label="Recovery copy"
     >
       <template v-if="recovery"

@@ -412,3 +412,10 @@ body select option {
 .vs__open-indicator {
   fill: #687573;
 }
+
+/* One backdrop for every modal: a soft tint with a light blur so the page behind recedes. */
+dialog::backdrop {
+  background: rgb(22 48 43 / 28%);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}

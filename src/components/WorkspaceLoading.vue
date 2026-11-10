@@ -22,9 +22,6 @@ onMounted(() => dialog.value.showModal());
 </template>
 
 <style scoped>
-.workspace-loading::backdrop {
-  background: rgb(30 46 44 / 40%);
-}
 .workspace-loading {
   width: min(calc(100% - 48px), 390px);
   padding: 30px;
