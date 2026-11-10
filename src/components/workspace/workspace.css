@@ -2110,6 +2110,12 @@
   border-top: 0;
   padding-top: 4px;
 }
+.trip-workspace-ui .mobile .identity {
+  min-width: 0;
+}
+.trip-workspace-ui .mobile:not(.compact-header) .identity select {
+  max-width: 100%;
+}
 .trip-workspace-ui #report-status:empty {
   display: none;
 }

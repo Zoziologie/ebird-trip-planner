@@ -274,7 +274,7 @@ export function mountWorkspace(root, model, options) {
     (event) => {
       if (!event.target.closest('#layers')) $('layers').open = false;
       if (
-        $('workspace-layout').classList.contains('mobile') &&
+        $('workspace-layout').classList.contains('compact-header') &&
         !event.target.closest('.header-menu')
       )
         root.querySelector('.header-menu').open = false;
@@ -2195,13 +2195,18 @@ export function mountWorkspace(root, model, options) {
         .map((l) => ({ coords: l.coords, count: l.count, recorded: l.counts[code] || 0 })),
     });
   };
-  const media = matchMedia('(max-width:700px)');
+  // The phone layout starts at 700px, but the header actions only fold into a menu on
+  // phone-sized screens, where they no longer fit next to the trip name.
+  const media = matchMedia('(max-width:700px)'),
+    compact = matchMedia('(max-width:480px)');
   const screen = () => {
     $('workspace-layout').classList.toggle('mobile', media.matches);
-    root.querySelector('.header-menu').open = !media.matches;
+    $('workspace-layout').classList.toggle('compact-header', compact.matches);
+    root.querySelector('.header-menu').open = !compact.matches;
     map.resize();
   };
   media.addEventListener('change', screen, { signal: abort.signal });
+  compact.addEventListener('change', screen, { signal: abort.signal });
   screen();
   // Index immutable locations once; only geometry/type edits repeat spatial selection.
   for (const stop of stops) computeSpatial(stop);

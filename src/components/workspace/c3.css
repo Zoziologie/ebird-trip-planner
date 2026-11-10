@@ -718,15 +718,15 @@
   grid-column: 2;
   position: relative;
 }
-.trip-workspace-ui .mobile .header-menu > summary {
+.trip-workspace-ui .compact-header .header-menu > summary {
   display: block;
   border: 1px solid var(--line);
   border-radius: 5px;
 }
-.trip-workspace-ui .mobile .header-menu:not([open]) .header-actions {
+.trip-workspace-ui .compact-header .header-menu:not([open]) .header-actions {
   display: none;
 }
-.trip-workspace-ui .mobile .header-actions {
+.trip-workspace-ui .compact-header .header-actions {
   position: absolute;
   top: 35px;
   right: 0;
@@ -741,7 +741,7 @@
   border-radius: 5px;
   box-shadow: 0 8px 24px #16312a25;
 }
-.trip-workspace-ui .mobile .header-actions button {
+.trip-workspace-ui .compact-header .header-actions button {
   text-align: left;
   font-size: 12px;
   padding: 9px;
