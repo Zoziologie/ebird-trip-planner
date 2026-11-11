@@ -209,7 +209,7 @@ try {
             )
             .click();
         if (action === 'species') document.querySelector('#species-view').click();
-        if (action === 'sort') document.querySelector('[data-sort="name"]').click();
+        if (action === 'sort') document.querySelector('[data-sort="taxon"]').click();
         if (action === 'radius')
           document
             .querySelector('[aria-label="Resize stop area north"]')
