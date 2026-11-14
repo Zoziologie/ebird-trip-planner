@@ -48,6 +48,7 @@ watch(
 onBeforeUnmount(() => controller?.destroy());
 defineExpose({
   getPlan: () => controller?.getPlan(),
+  setPersonalLists: (lists) => controller?.setPersonalLists(lists),
   replacePlan: (model) => controller?.replacePlan(model),
 });
 </script>
@@ -156,7 +157,11 @@ defineExpose({
                   </select></span
                 >
                 <div class="name-field">
-                  <input id="name" aria-label="Stop name" title="Click to rename" /><button
+                  <input id="name" aria-label="Stop name" title="Click to rename" />
+                  <button id="rename-stop" aria-label="Rename stop" title="Rename stop">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                  </button>
+                  <button
                     id="auto-name"
                     aria-label="Auto name from location"
                     title="Auto name from location"
@@ -399,38 +404,78 @@ defineExpose({
         </button>
       </div>
       <section class="settings-section edit-only">
-        <h3>Trip</h3>
         <slot name="trip-options" />
       </section>
       <section class="settings-section edit-only">
         <h3>eBird</h3>
-        <div class="list-upload">
-          <strong>Life list</strong><span id="life-list-status" class="small"></span>
-          <label class="file-button"
-            >Import CSV<input id="life-upload" type="file" accept=".csv,text/csv" /></label
-          ><button id="life-clear">Remove</button>
-        </div>
-        <div class="list-upload">
-          <strong>Region list</strong><span id="region-list-status" class="small"></span>
-          <label class="file-button"
-            >Import CSV<input id="region-upload" type="file" accept=".csv,text/csv" /></label
-          ><button id="region-clear">Remove</button>
+        <p class="small">
+          Your lists are private snapshots for this trip. Sign in to sync them across your devices.
+          They stay fixed until you import or remove a list.
+        </p>
+        <div v-for="kind in ['life', 'region']" :key="kind" class="list-upload">
+          <a
+            :href="
+              kind === 'life'
+                ? 'https://ebird.org/lifelist?time=life&r=world'
+                : 'https://ebird.org/lifelist'
+            "
+            target="_blank"
+            rel="noopener"
+            :title="
+              kind === 'life'
+                ? 'Download your world life list on eBird'
+                : 'Choose a region and download your list on eBird'
+            "
+            >{{ kind === 'life' ? 'Life list' : 'Region list' }}
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i
+          ></a>
+          <span :id="kind + '-list-status'" class="list-status small" role="status"></span>
+          <label class="file-button" :title="'Import ' + kind + ' list CSV'"
+            >Import CSV<input
+              :id="kind + '-upload'"
+              :aria-label="'Import ' + kind + ' list CSV'"
+              type="file"
+              accept=".csv,text/csv"
+          /></label>
+          <button
+            :id="kind + '-clear'"
+            class="settings-icon-button"
+            :aria-label="'Remove ' + kind + ' list'"
+            :title="'Remove ' + kind + ' list'"
+          >
+            <i class="bi bi-trash3" aria-hidden="true"></i>
+          </button>
         </div>
         <p id="list-feedback" role="status" class="small"></p>
-        <label for="report-link">eBird trip report</label>
-        <div class="settings-input-action">
-          <input id="report-link" placeholder="Trip report link or ID" /><button id="sync-report">
-            Sync</button
-          ><button id="disconnect-report">Remove</button>
+        <div class="settings-inline-row report-settings">
+          <a
+            href="https://ebird.org/mytripreports"
+            target="_blank"
+            rel="noopener"
+            title="Find your eBird trip report"
+            >Trip report <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i
+          ></a>
+          <div class="settings-input-action">
+            <input
+              id="report-link"
+              aria-label="eBird trip report link or ID"
+              placeholder="Link or ID"
+            />
+            <button id="sync-report" title="Sync trip report">Sync</button>
+            <button
+              id="disconnect-report"
+              class="settings-icon-button"
+              aria-label="Disconnect trip report"
+              title="Disconnect trip report"
+            >
+              <i class="bi bi-trash3" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
-        <div id="report-summary" class="small"></div>
+        <div id="report-summary" class="small" role="status"></div>
         <p id="report-progress" role="status" class="small"></p>
-        <a class="small" href="https://ebird.org/mytripreports" target="_blank" rel="noopener"
-          >Find your eBird trip report ↗</a
-        >
       </section>
       <section class="settings-section">
-        <h3>Map</h3>
         <label class="preference-row" for="map-style"
           >Map style<select id="map-style">
             <option value="outdoors-v12">Outdoor</option>
@@ -438,28 +483,29 @@ defineExpose({
             <option value="light-v11">Light</option>
           </select></label
         >
-        <p class="small">
-          Used by the Map tile in the layer menu. Satellite remains a separate choice.
-        </p>
       </section>
       <section class="settings-section edit-only">
-        <h3>Stop display</h3>
-        <p class="small">
-          Default: visible in the editor · Details: collapsed · Hidden: not shown. Saved on this
-          device.
-        </p>
-        <label
-          v-for="[id, label] in stopFields"
-          :key="id"
-          class="preference-row"
-          :for="'display-' + id"
-          >{{ label
-          }}<select :id="'display-' + id">
-            <option value="default">Default</option>
-            <option value="detail">Details</option>
-            <option value="hidden">Hidden</option>
-          </select></label
-        ><button id="reset-display">Reset display preferences</button>
+        <details class="display-settings">
+          <summary>
+            <span><i class="bi bi-sliders" aria-hidden="true"></i> Stop display</span
+            ><span class="small">This device</span>
+          </summary>
+          <label
+            v-for="[id, label] in stopFields"
+            :key="id"
+            class="preference-row"
+            :for="'display-' + id"
+            >{{ label
+            }}<select :id="'display-' + id">
+              <option value="default">Visible</option>
+              <option value="detail">Details</option>
+              <option value="hidden">Hidden</option>
+            </select></label
+          ><button id="reset-display">Reset defaults</button>
+        </details>
+      </section>
+      <section v-if="$slots['time-zone']" class="settings-section edit-only">
+        <slot name="time-zone" />
       </section>
     </dialog>
     <dialog id="key-dialog">

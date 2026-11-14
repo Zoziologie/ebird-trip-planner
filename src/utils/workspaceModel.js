@@ -1,15 +1,22 @@
 import { compactRouteGeometry } from './routeGeometry.js';
 
 // Adapt the existing trip archive to the reviewed workspace's presentation model.
-export const workspaceModel = (plan, ebd, comments = [], report = null, taxonomy = {}) => {
+export const workspaceModel = (
+  plan,
+  ebd,
+  comments = [],
+  report = null,
+  taxonomy = {},
+  lists = [],
+) => {
   const taxa = (ebd?.speciesList || []).map((t) => ({
     code: t.code,
     name: t.commonName,
     latin: t.scientificName || '',
     category: t.category || 'species',
     order: t.taxonOrder || 99999,
-    life: t.liferWorld ?? null,
-    region: t.liferRegion ?? null,
+    life: null,
+    region: null,
     ebd: true,
   }));
   for (const t of report?.taxa || [])
@@ -37,6 +44,10 @@ export const workspaceModel = (plan, ebd, comments = [], report = null, taxonomy
         region: null,
         ebd: false,
       });
+  }
+  for (const kind of ['life', 'region']) {
+    const values = lists.find((list) => list.kind === kind)?.values || {};
+    for (const t of taxa) t[kind] = values[t.code] ?? null;
   }
   const names = new Map(taxa.map((t) => [t.code, t.name]));
   const stops = plan.stops.map((s) => ({

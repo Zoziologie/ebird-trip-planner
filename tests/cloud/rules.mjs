@@ -232,6 +232,33 @@ try {
   await assertFails(setDoc(workspaceRef(editor), workspace));
   await assertSucceeds(setDoc(workspaceRef(owner), workspace));
   await assertSucceeds(getDoc(workspaceRef(editor)));
+  const personalRef = (context, uid = 'owner', kind = 'life') =>
+    doc(context.firestore(), 'personalTripLists', uid, 'trips', `${id}_editor-save_${kind}`);
+  const personalList = {
+    cloudId: id,
+    datasetRevision: 'editor-save',
+    kind: 'life',
+    values: { osprey: false, robin: true },
+    revision: 'list-1',
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(personalRef(owner), personalList));
+  await assertSucceeds(getDoc(personalRef(owner)));
+  await assertFails(getDoc(personalRef(editor)));
+  await assertFails(getDoc(personalRef(stranger)));
+  await assertFails(getDoc(personalRef(anonymous)));
+  await assertFails(setDoc(personalRef(editor), personalList));
+  await assertSucceeds(setDoc(personalRef(editor, 'editor'), personalList));
+  await assertFails(getDoc(personalRef(owner, 'editor')));
+  await assertFails(setDoc(personalRef(stranger, 'stranger'), personalList));
+  await assertFails(setDoc(personalRef(owner), { ...personalList, datasetRevision: 'old-trip' }));
+  await assertSucceeds(
+    setDoc(personalRef(owner, 'owner', 'region'), { ...personalList, kind: 'region' }),
+  );
+  await assertSucceeds(
+    setDoc(personalRef(owner), { ...personalList, values: {}, revision: 'cleared' }),
+  );
+
   await assertFails(getDoc(workspaceRef(stranger)));
   await assertFails(getDoc(workspaceRef(anonymous)));
   await assertSucceeds(updateDoc(doc(owner.firestore(), 'cloudTrips', id), { public: true }));
@@ -280,7 +307,9 @@ try {
   );
   await assertFails(deleteObject(ref(editor.storage(), `trips/${id}/editor-save.ebirdtrip`)));
   await assertSucceeds(updateDoc(doc(owner.firestore(), 'tripAccess', id), { editorEmails: [] }));
-  await assertSucceeds(getDoc(workspaceRef(editor))); // Still a public visitor.
+  await assertSucceeds(getDoc(workspaceRef(editor)));
+  await assertFails(setDoc(personalRef(editor, 'editor'), personalList));
+  // Still a public visitor.
   await assertSucceeds(updateDoc(doc(owner.firestore(), 'cloudTrips', id), { public: false }));
   await assertFails(getDoc(workspaceRef(editor)));
   await assertFails(

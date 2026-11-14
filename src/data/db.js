@@ -31,6 +31,7 @@ db.version(4).stores({
 });
 
 db.version(5).stores({ workspaceReports: 'reportId' });
+db.version(6).stores({ personalLists: '[tripId+accountId+kind], [tripId+accountId], tripId' });
 
 db.visits.hook('creating', (key, visit) => {
   if (!visit.workspaceId) visit.workspaceId = crypto.randomUUID();

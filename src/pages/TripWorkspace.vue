@@ -42,6 +42,7 @@ import AppAlert from '../components/AppAlert.vue';
 import { taxonomyByCode } from '../utils/taxonomy';
 import { workspaceModel } from '../utils/workspaceModel';
 import { mergePlans, samePlan } from '../utils/workspacePlan';
+import { readPersonalLists, preparePersonalLists, savePersonalList } from '../utils/personalLists';
 import { tripTimeZone } from '../utils/tripTimeZone';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
@@ -53,12 +54,13 @@ let writes = Promise.resolve();
 // instead of overwriting the collaborator's stops with the editor's stale copy.
 let editorBase = null;
 const buildModel = async (plan, tripId) => {
-  const [ebd, comments, report] = await Promise.all([
+  const [ebd, comments, report, lists] = await Promise.all([
     tripId ? db.ebd.get(tripId) : null,
     tripId ? db.comments.get(tripId) : null,
     plan.reportId ? db.workspaceReports.get(plan.reportId) : null,
+    tripId ? readPersonalLists(tripId) : [],
   ]);
-  return workspaceModel(plan, ebd, comments?.entries || [], report, taxonomyByCode);
+  return workspaceModel(plan, ebd, comments?.entries || [], report, taxonomyByCode, lists);
 };
 const loadModel = async (plan, tripId) => {
   model.value = await buildModel(plan, tripId);
@@ -98,18 +100,7 @@ const addDataset = async (payload, onProgress) => {
   onProgress(1, 1, 'save steps');
   await loadModel(await readWorkspacePlan(tripId), tripId);
 };
-const saveLists = async (kind, taxa) => {
-  const tripId = selectedTripId.value;
-  const field = kind === 'life' ? 'liferWorld' : 'liferRegion';
-  const ebd = await db.ebd.get(tripId);
-  if (ebd)
-    await db.ebd.update(tripId, {
-      speciesList: ebd.speciesList.map((t) => ({
-        ...t,
-        [field]: taxa.get(t.code)?.[kind] ?? null,
-      })),
-    });
-};
+const saveLists = (kind, taxa) => savePersonalList(selectedTripId.value, kind, taxa);
 const route = useRoute();
 const router = useRouter();
 const ready = ref(false);
@@ -251,14 +242,17 @@ const attachLocal = async (tripId) => {
   await writes;
   loadingMessage.value = 'Loading your trip data…';
   await prepareWorkspace(tripId);
+  await preparePersonalLists(tripId);
   await loadModel(await readWorkspacePlan(tripId), tripId);
   subscription = liveQuery(async () => ({
     plan: await readWorkspacePlan(tripId),
+    lists: await readPersonalLists(tripId),
     state: await db.workspaceSync.get(tripId),
     recoveries: await db.workspaceRecovery.where('tripId').equals(tripId).reverse().toArray(),
   })).subscribe((result) => {
     if (localPlan.value?.name !== result.plan.name) name.value = result.plan.name;
     if (localPlan.value?.timeZone !== result.plan.timeZone) timeZone.value = result.plan.timeZone;
+    workspaceView.value?.setPersonalLists(result.lists);
     localPlan.value = result.plan;
     state.value = result.state;
     recoveries.value = result.recoveries;
@@ -266,6 +260,7 @@ const attachLocal = async (tripId) => {
   sync = watchWorkspaceSync(tripId);
   loadingMessage.value = 'Checking for saved changes…';
   await sync.flush();
+  await loadModel(await readWorkspacePlan(tripId), tripId);
   const linked = await db.workspaceSync.get(tripId);
   if (navigator.onLine && linked?.cloudId && cloudUser.value?.uid === linked.accountId)
     await recordCloudActivity(linked.cloudId).catch((failure) => {
@@ -455,7 +450,7 @@ watch(
     if (!initialized) return;
     // Signing in or out of a shared link can switch between viewing and editing.
     if (cloudId.value) load();
-    else sync?.flush();
+    else if (selectedTripId.value) load();
   },
   { flush: 'sync' },
 );
@@ -572,7 +567,7 @@ onBeforeUnmount(() => {
             <strong>{{ localPlan.name }}</strong>
           </template>
           <template #trip-options>
-            <div class="trip-metadata">
+            <div class="trip-metadata settings-inline-row">
               <label for="workspace-name">Trip name</label>
               <div class="settings-input-action">
                 <input id="workspace-name" v-model="name" /><button
@@ -583,39 +578,36 @@ onBeforeUnmount(() => {
                   Save
                 </button>
               </div>
-              <details>
-                <summary>Advanced · time zone</summary>
-                <p class="small">
-                  Enter all stop times in local time at the destination. The trip clock uses the
-                  first scheduled stop's time zone. Changing it keeps your entered times unchanged.
-                </p>
-                <p class="small">
-                  {{
-                    detectedTimeZone
-                      ? `Detected: ${detectedTimeZone.replaceAll('_', ' ')}`
-                      : 'Detected when you add the first stop.'
-                  }}
-                </p>
-                <label for="workspace-time-zone">Time zone override (optional)</label>
-                <div class="settings-input-action">
-                  <input
-                    id="workspace-time-zone"
-                    v-model="timeZone"
-                    list="workspace-time-zones"
-                    placeholder="Automatic from first stop"
-                  /><button :disabled="busy" aria-label="Save time zone" @click="saveTimeZone">
-                    Save
-                  </button>
-                </div>
-                <datalist id="workspace-time-zones">
-                  <option v-for="zone in timeZones" :key="zone" :value="zone" />
-                </datalist>
-                <p class="small">
-                  Leave blank and save to use automatic detection. Trips crossing time zones
-                  currently use one trip clock.
-                </p>
-              </details>
             </div>
+          </template>
+          <template #time-zone>
+            <details class="timezone-settings">
+              <summary>
+                <span><i class="bi bi-clock" aria-hidden="true"></i> Time zone</span
+                ><span class="small">{{
+                  timeZone || detectedTimeZone?.replaceAll('_', ' ') || 'Automatic'
+                }}</span>
+              </summary>
+              <div class="settings-input-action">
+                <input
+                  id="workspace-time-zone"
+                  v-model="timeZone"
+                  list="workspace-time-zones"
+                  aria-label="Time zone override"
+                  :placeholder="detectedTimeZone || 'Automatic from first stop'"
+                />
+                <button :disabled="busy" aria-label="Save time zone" @click="saveTimeZone">
+                  Save
+                </button>
+              </div>
+              <datalist id="workspace-time-zones">
+                <option v-for="zone in timeZones" :key="zone" :value="zone" />
+              </datalist>
+              <p class="small">
+                One clock for the trip; stop times stay unchanged. Leave blank for automatic
+                detection.
+              </p>
+            </details>
           </template>
           <template #actions>
             <span class="edit-only small" role="status">{{ workspaceStatus }}</span>

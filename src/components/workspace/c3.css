@@ -1357,24 +1357,139 @@
   max-width: calc(100vw - 165px);
 }
 
+/* Compact settings keep each control beside its label and status. */
+.trip-workspace-ui #settings-dialog .settings-section {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.trip-workspace-ui #settings-dialog .settings-section h3 {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.trip-workspace-ui #settings-dialog .settings-inline-row {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.trip-workspace-ui #settings-dialog .settings-input-action {
+  margin: 0;
+  gap: 6px;
+}
+.trip-workspace-ui #settings-dialog .settings-input-action input {
+  width: 0;
+}
+.trip-workspace-ui #settings-dialog .settings-section a {
+  color: var(--green);
+  text-decoration: none;
+}
+.trip-workspace-ui #settings-dialog .settings-section a:hover {
+  text-decoration: underline;
+}
+.trip-workspace-ui #settings-dialog a .bi {
+  margin-left: 3px;
+  font-size: 10px;
+}
 .trip-workspace-ui #settings-dialog .list-upload {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  border-top: 0;
-  padding: 8px 0;
-  gap: 4px 8px;
+  grid-template-columns: 94px minmax(0, 1fr) auto 30px;
+  border: 0;
+  padding: 5px 0;
+  gap: 10px;
 }
-.trip-workspace-ui #settings-dialog .list-upload > strong {
+.trip-workspace-ui #settings-dialog .list-status {
   width: auto;
+  font-size: 11px;
+}
+.trip-workspace-ui #settings-dialog .list-status.is-imported {
+  color: var(--green);
+}
+.trip-workspace-ui #settings-dialog .list-status.is-imported::before {
+  content: '✓ ';
+}
+.trip-workspace-ui #settings-dialog .file-button {
+  margin: 0;
+  white-space: nowrap;
+}
+.trip-workspace-ui #settings-dialog .file-button:focus-within {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+.trip-workspace-ui #settings-dialog .settings-icon-button {
+  flex-shrink: 0;
+  width: 30px;
+  padding: 5px;
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
+}
+.trip-workspace-ui #settings-dialog .report-settings {
+  margin-top: 10px;
+}
+.trip-workspace-ui #settings-dialog #report-summary:not(:empty) {
+  margin: 6px 0 0 104px;
+  font-size: 11px;
+}
+.trip-workspace-ui #settings-dialog :is(#list-feedback, #report-progress):empty {
+  display: none;
+}
+.trip-workspace-ui #settings-dialog .preference-row {
+  margin: 0;
+  padding: 4px 0;
+}
+.trip-workspace-ui #settings-dialog details > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
   font-size: 12px;
 }
-.trip-workspace-ui #settings-dialog .list-upload > .small {
-  grid-column: 1;
-  grid-row: 2;
+.trip-workspace-ui #settings-dialog details > summary::-webkit-details-marker {
+  display: none;
 }
-.trip-workspace-ui #settings-dialog .list-upload > .file-button,
-.trip-workspace-ui #settings-dialog .list-upload > button {
-  grid-row: 1 / span 2;
+.trip-workspace-ui #settings-dialog details > summary > .small {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.trip-workspace-ui #settings-dialog details > summary::after {
+  content: '›';
+  color: var(--muted);
+  font-size: 18px;
+}
+.trip-workspace-ui #settings-dialog details[open] > summary::after {
+  transform: rotate(90deg);
+}
+.trip-workspace-ui #settings-dialog details[open] > summary {
+  margin-bottom: 10px;
+}
+.trip-workspace-ui #settings-dialog summary .bi {
+  color: var(--muted);
+  margin-right: 6px;
+}
+@media (max-width: 440px) {
+  .trip-workspace-ui #settings-dialog .list-upload {
+    grid-template-columns: 84px minmax(0, 1fr) auto 26px;
+    gap: 6px;
+  }
+  .trip-workspace-ui #settings-dialog .settings-inline-row {
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 6px;
+  }
+  .trip-workspace-ui #settings-dialog .file-button {
+    padding: 6px;
+    font-size: 11px;
+  }
+  .trip-workspace-ui #settings-dialog #report-summary:not(:empty) {
+    margin-left: 90px;
+  }
 }
 
 /* The selected stop is gold so it never reads as part of its green area circle. */
@@ -1460,6 +1575,10 @@
   font-size: 13px;
 }
 .trip-workspace-ui .name-field:focus-within button {
+  display: inline-grid;
+  place-items: center;
+}
+.trip-workspace-ui .name-field #rename-stop {
   display: inline-grid;
   place-items: center;
 }

@@ -10,6 +10,7 @@ import {
   publishWorkspacePlan,
   watchWorkspaceCloud,
 } from '../utils/workspaceCloud';
+import { readPersonalLists, syncPersonalLists } from '../utils/personalLists';
 import { workspaceReload } from './workspaceEvents';
 export { workspaceReload } from './workspaceEvents';
 
@@ -131,6 +132,14 @@ export const watchWorkspaceSync = (tripId) => {
       again = !samePlan(await readWorkspacePlan(tripId), saved.plan);
     }
   };
+  const syncCycle = async () => {
+    await sync();
+    const state = await db.workspaceSync.get(tripId);
+    if (navigator.onLine && state?.cloudId)
+      await syncPersonalLists(tripId, state).catch((error) => {
+        status(`Trip saved · personal lists could not sync: ${error.message}`);
+      });
+  };
   const flush = async () => {
     if (stopped) return;
     if (running) {
@@ -141,8 +150,8 @@ export const watchWorkspaceSync = (tripId) => {
     try {
       do {
         again = false;
-        if (navigator.locks) await navigator.locks.request(`workspace-sync:${tripId}`, sync);
-        else await sync();
+        if (navigator.locks) await navigator.locks.request(`workspace-sync:${tripId}`, syncCycle);
+        else await syncCycle();
       } while (again && !stopped);
     } catch (error) {
       status(`Saved on this device · ${error.message}`);
@@ -154,7 +163,10 @@ export const watchWorkspaceSync = (tripId) => {
     clearTimeout(timer);
     timer = setTimeout(flush, 1200);
   };
-  const subscription = liveQuery(() => readWorkspacePlan(tripId)).subscribe({
+  const subscription = liveQuery(async () => [
+    await readWorkspacePlan(tripId),
+    await readPersonalLists(tripId),
+  ]).subscribe({
     next: schedule,
     error: (error) => {
       status(`Device save error: ${error.message}`);

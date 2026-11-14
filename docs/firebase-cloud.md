@@ -34,7 +34,7 @@ Storage rules inspect Firestore access documents. The Firebase Storage service a
 
 ## Free allowance
 
-Any verified Google account can create three cloud trips without an invitation. Each compressed archive is limited to 50 MiB. Archives include life and region lists and all exported trip data. Shared trips do not consume an editor's own allowance. There is no global user limit.
+Any verified Google account can create three cloud trips without an invitation. Each compressed archive is limited to 50 MiB. Local backups include exported trip data; private account lists are stored separately and are not included. Legacy backups may contain device-only life and region flags. Shared trips do not consume an editor's own allowance. There is no global user limit.
 
 There is no in-app capacity request. To give someone a different allowance, an administrator creates or updates `cloudAccounts/<Firebase UID>` in the Firebase console with integer `tripSlots` (1–10), for example `5` for five 50 MiB trips. The UID is listed under Authentication → Users.
 
@@ -73,3 +73,13 @@ Manual checks: Google login; reload remembers login; save and reload a trip; lif
 Run `python3 scripts/cloud_usage_report.py` using your existing administrator `gcloud` login. The script is read-only and reports owners with saved trips, published/public trips, published archive bytes, all live bucket bytes, custom allowances and trips inactive for more than six months. It never changes allowances or deletes data. It excludes retained soft-deleted objects, billing totals and download traffic; check Google Cloud Billing/Storage monitoring for those.
 
 A Codex heartbeat in this chat is scheduled every Monday at 09:00 Europe/Paris to run the report. This depends on the local Codex environment and administrator login being available; it is not a server-side Firebase job or an email service. Pause or change it in Codex automations.
+
+## Private trip lists
+
+Life and region lists are private snapshots per Google account and trip, stored separately from shared plans and source datasets. Only species relevant to the trip are retained, as species-code to lifer-flag maps. Imports and clears replace one list kind without affecting the other kind or other trips. Snapshots do not change when an eBird report is refreshed. Private account lists are excluded from trip backups and sharing.
+
+IndexedDB `personalLists` stores offline copies keyed by trip, account, and kind. Signed-out imports remain device-only and transfer to the account on the next sign-in. Existing device-only flags migrate once and are removed from the EBD dataset. Signing out or switching accounts switches the displayed personal lists.
+
+Cloud documents live at `personalTripLists/{uid}/trips/{cloudId}_{datasetRevision}_{kind}`. Dataset revisions prevent reused trip slots from inheriting old lists. Rules allow only the account itself to read its lists, and require trip editing access to write. The existing sync coordinator retries on reconnect, focus, and its regular polling interval, including while the trip library is open. Concurrent replacements of the same kind use the last successful sync; offline imports replace the cloud snapshot on reconnect. Imports made during an upload remain pending for the next sync. Empty records propagate clears across devices.
+
+On 14 November 2026 the private-list Firestore rules were deployed through the Firebase Rules REST API and the active release and published source were verified (ruleset `cfed83c2-88e8-4184-8f1d-a329281829f8`; previous `2b1720c7-752b-4abe-a69a-b46f923104a9`). The website client must also be deployed through the normal GitHub Pages workflow to expose private-list sync to production users.

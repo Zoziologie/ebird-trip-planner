@@ -15,6 +15,7 @@ import { workspaceModelPlan } from '../../utils/workspaceModel';
 import { tripTimeZone } from '../../utils/tripTimeZone';
 import polyline from '@mapbox/polyline';
 import { compactRouteGeometry } from '../../utils/routeGeometry';
+import { retainWorkspaceRoutes } from '../../utils/workspaceRoutes';
 import { normalizeWorkspaceReportId, loadWorkspaceReport } from '../../utils/workspaceReport';
 
 // The reviewed workspace interaction controller, mounted and disposed by Vue.
@@ -79,7 +80,7 @@ export function mountWorkspace(root, model, options) {
     redoStack = [];
   let typingKey = '',
     typingAt = 0;
-  const routes = new Map(stops.filter((s) => s.route.geometry).map((s) => [s.id, s.route]));
+  let routes = new Map(stops.filter((s) => s.route.geometry).map((s) => [s.id, s.route]));
   const markers = new Map();
   let areaHandles = [],
     dragging = false,
@@ -1558,7 +1559,7 @@ export function mountWorkspace(root, model, options) {
       ? synced
         ? aggregation().lists.length + ' checklists loaded through ' + dateLabel(cutoff())
         : 'No checklists loaded'
-      : 'Add a trip report link to load checklists';
+      : '';
     $('disconnect-report').hidden = !reportId;
   }
   function queueSave() {
@@ -1587,8 +1588,9 @@ export function mountWorkspace(root, model, options) {
       return;
     }
     if (field === 'date') {
+      const previousStops = [...stops];
       stops.sort((a, b) => a.date.localeCompare(b.date));
-      routes.clear();
+      routes = retainWorkspaceRoutes(previousStops, stops, routes);
       drawLayers();
       drawMarkers();
     }
@@ -1648,8 +1650,9 @@ export function mountWorkspace(root, model, options) {
     rememberEdit();
     planningCache = null;
     selectionStatsKey = '';
+    const previousStops = stops;
     stops = stops.filter((s) => !ids.includes(s.id));
-    routes.clear();
+    routes = retainWorkspaceRoutes(previousStops, stops, routes);
     selected = stops[0]?.id || 0;
     checked.clear();
     renderList();
@@ -1818,8 +1821,9 @@ export function mountWorkspace(root, model, options) {
     for (const kind of ['life', 'region']) {
       const values = [...taxa.values()].filter((t) => t[kind] !== null);
       $(kind + '-list-status').textContent = values.length
-        ? values.filter((t) => t[kind] === false).length + ' species matched'
-        : 'No list imported';
+        ? values.filter((t) => t[kind] === false).length + ' matched'
+        : 'Not imported';
+      $(kind + '-list-status').classList.toggle('is-imported', Boolean(values.length));
       $(kind + '-clear').disabled = !values.length;
     }
   }
@@ -1870,6 +1874,10 @@ export function mountWorkspace(root, model, options) {
     change('name', e.target.value);
     fitName();
   };
+  $('rename-stop').onclick = () => {
+    $('name').focus();
+    $('name').select();
+  };
   // Keep the name focused while clicking auto-name, which only shows during name editing.
   $('auto-name').onmousedown = (e) => e.preventDefault();
   $('type').onchange = (e) => {
@@ -1911,6 +1919,7 @@ export function mountWorkspace(root, model, options) {
   };
   $('shift').onclick = () => {
     rememberEdit();
+    const previousStops = [...stops];
     const amount = Number($('shift-amount').value),
       unit = $('shift-unit').value;
     for (const s of stops.filter((s) => checked.has(s.id))) {
@@ -1929,7 +1938,7 @@ export function mountWorkspace(root, model, options) {
         String(d.getMinutes()).padStart(2, '0');
     }
     stops.sort((a, b) => a.date.localeCompare(b.date));
-    routes.clear();
+    routes = retainWorkspaceRoutes(previousStops, stops, routes);
     renderList();
     drawLayers();
     drawMarkers();
@@ -1940,6 +1949,7 @@ export function mountWorkspace(root, model, options) {
   $('remove-bulk').onclick = () => removeStops([...checked]);
   $('add').onclick = () => {
     rememberEdit();
+    const previousStops = [...stops];
     const id = crypto.randomUUID(),
       date = active()?.date || data.start + 'T07:00',
       c = map.getCenter();
@@ -1965,6 +1975,7 @@ export function mountWorkspace(root, model, options) {
       ),
     );
     stops.sort((a, b) => a.date.localeCompare(b.date));
+    routes = retainWorkspaceRoutes(previousStops, stops, routes);
     choose(id);
     updateSpatial(active());
   };
@@ -2266,6 +2277,15 @@ export function mountWorkspace(root, model, options) {
       renderSpecies();
       drawMarkers();
       drawLayers();
+    },
+    setPersonalLists(lists) {
+      planningCache = null;
+      for (const kind of ['life', 'region']) {
+        const values = lists.find((list) => list.kind === kind)?.values || {};
+        for (const t of taxa.values()) t[kind] = values[t.code] ?? null;
+      }
+      renderLists();
+      renderSpecies();
     },
     destroy() {
       disposed = true;

@@ -138,3 +138,36 @@ test('legacy embedded observer comments remain available without copying malform
   assert.equal(model.comments[0].checklist_id, 'S1');
   assert.deepEqual(model.comments[0].species_comments, [['osprey', 'Fishing']]);
 });
+
+test('private trip snapshots override legacy dataset flags and stay out of shared plans', () => {
+  const ebd = {
+    speciesList: [
+      { code: 'osprey', commonName: 'Osprey', liferWorld: true, liferRegion: true },
+      { code: 'robin', commonName: 'Robin' },
+    ],
+  };
+  const lists = [
+    { kind: 'life', values: { osprey: false, robin: true } },
+    { kind: 'region', values: { osprey: true } },
+  ];
+  const model = workspaceModel(plan, ebd, [], null, {}, lists);
+  assert.equal(model.taxa[0].life, false);
+  assert.equal(model.taxa[0].region, true);
+  assert.equal(model.taxa[1].life, true);
+  assert.equal(model.taxa[1].region, null);
+  const otherUser = workspaceModel(plan, ebd);
+  assert.equal(otherUser.taxa[0].life, null);
+  assert.equal(otherUser.taxa[0].region, null);
+  const cleared = workspaceModel(plan, ebd, [], null, {}, [{ kind: 'life', values: {} }]);
+  assert.equal(cleared.taxa[0].life, null);
+});
+
+test('personal flags also apply to trip-report species outside the EBD dataset', () => {
+  const report = { taxa: [{ speciesCode: 'newbird', commonName: 'New bird' }], checklists: [] };
+  const model = workspaceModel(plan, null, [], report, {}, [
+    { kind: 'life', values: { newbird: false } },
+    { kind: 'region', values: { newbird: true } },
+  ]);
+  assert.equal(model.taxa.find((t) => t.code === 'newbird').life, false);
+  assert.equal(model.taxa.find((t) => t.code === 'newbird').region, true);
+});

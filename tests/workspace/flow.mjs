@@ -910,6 +910,88 @@ try {
     }),
     undefined,
   );
+  console.log('Checking private lists across accounts, devices, and offline clears…');
+  const personalLists = (target) =>
+    target.evaluate(async () => {
+      await window.workspaceHarnessReady;
+      const { readPersonalLists, selectedTripId } = window.workspaceTest;
+      return readPersonalLists(selectedTripId.value);
+    });
+  const replaceList = (target, kind, value) =>
+    target.evaluate(
+      async ({ kind, value }) => {
+        const { savePersonalList, selectedTripId } = window.workspaceTest;
+        await savePersonalList(
+          selectedTripId.value,
+          kind,
+          new Map([['osprey', { code: 'osprey', [kind]: value }]]),
+        );
+      },
+      { kind, value },
+    );
+  await until(
+    async () => (await personalLists(page)).some((list) => list.kind === 'life' && !list.dirty),
+    'legacy list migration sync',
+  );
+  assert.equal(
+    (await personalLists(page)).find((list) => list.kind === 'life').values.osprey,
+    true,
+  );
+  assert.equal((await personalLists(editor)).length, 0, 'collaborator has no owner lists');
+  await replaceList(editor, 'life', false);
+  await until(
+    async () => (await personalLists(editor)).some((list) => list.kind === 'life' && !list.dirty),
+    'editor private list upload',
+  );
+  assert.equal(
+    (await personalLists(page)).find((list) => list.kind === 'life').values.osprey,
+    true,
+  );
+  const sameOwnerContext = await context();
+  const sameOwner = sameOwnerContext.pages()[0];
+  await sameOwner.goto(`${base}/workspace`);
+  await login(sameOwner, 'workspace-owner');
+  await sameOwner.goto(`${base}/workspace?cloud=${cloudId}`);
+  await sameOwner.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  await until(
+    async () =>
+      (await personalLists(sameOwner)).some(
+        (list) => list.kind === 'life' && list.values.osprey === true,
+      ),
+    'same account downloads private lists',
+  );
+  await sameOwnerContext.setOffline(true);
+  await replaceList(sameOwner, 'life', null);
+  await sameOwner.reload();
+  await sameOwner.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  assert.deepEqual(
+    (await personalLists(sameOwner)).find((list) => list.kind === 'life').values,
+    {},
+  );
+  await sameOwnerContext.setOffline(false);
+  await until(
+    async () =>
+      (await personalLists(sameOwner)).some((list) => list.kind === 'life' && !list.dirty),
+    'offline clear uploads',
+  );
+  await page.bringToFront();
+  await until(
+    async () =>
+      Object.keys((await personalLists(page)).find((list) => list.kind === 'life').values)
+        .length === 0,
+    'clear reaches other device',
+  );
+  assert.equal(
+    (await personalLists(page)).find((list) => list.kind === 'region').values.osprey,
+    true,
+    'clearing life preserves region',
+  );
+  assert.equal(
+    (await personalLists(editor)).find((list) => list.kind === 'life').values.osprey,
+    false,
+    'clearing owner list preserves collaborator list',
+  );
+  await sameOwnerContext.close();
   // Edits to different fields of one stop merge on both devices without a recovery copy,
   // and the collaborator's open editor shows the result live, without a reload.
   await chooseAlpha(page);

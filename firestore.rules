@@ -43,6 +43,20 @@ service cloud.firestore {
     match /cloudAccounts/{uid} {
       allow get: if googleUser() && request.auth.uid == uid;
     }
+    // Private snapshots belong to one account, trip dataset, and list kind.
+    match /personalTripLists/{uid}/trips/{listId} {
+      allow get: if googleUser() && request.auth.uid == uid;
+      allow create, update: if googleUser() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['cloudId', 'datasetRevision', 'kind', 'values', 'revision', 'updatedAt'])
+        && request.resource.data.cloudId is string && editor(request.resource.data.cloudId)
+        && request.resource.data.datasetRevision == get(/databases/$(database)/documents/workspaces/$(request.resource.data.cloudId)).data.datasetRevision
+        && request.resource.data.kind in ['life', 'region']
+        && listId == request.resource.data.cloudId + '_' + request.resource.data.datasetRevision + '_' + request.resource.data.kind
+        && request.resource.data.values is map && request.resource.data.values.size() <= 30000
+        && request.resource.data.revision is string && request.resource.data.revision.size() <= 64
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if googleUser() && request.auth.uid == uid;
+    }
     match /tripAccess/{id} {
       allow read: if googleUser() && (resource.data.ownerUid == request.auth.uid || request.auth.token.email.lower() in resource.data.editorEmails);
       allow create: if ownSlot(id)

@@ -435,6 +435,7 @@ const remove = () =>
         db.ebd,
         db.visits,
         db.lists,
+        db.personalLists,
         db.checklists,
         db.comments,
         db.workspaceSync,
@@ -442,7 +443,7 @@ const remove = () =>
           await db.workspaceSync.delete(item.localId);
           await db.trips.delete(item.localId);
           await db.ebd.delete(item.localId);
-          for (const table of [db.visits, db.lists, db.checklists])
+          for (const table of [db.visits, db.lists, db.personalLists, db.checklists])
             await table.where('tripId').equals(item.localId).delete();
           await db.comments.delete(item.localId);
         },
