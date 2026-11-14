@@ -2,6 +2,7 @@ import mapboxgl from 'mapbox-gl';
 import hotspotIcon from './report-hotspot.svg';
 import personalIcon from './report-personal.svg';
 import Papa from 'papaparse';
+import { speciesLinkOptions, speciesLinkUrls, speciesMapBounds } from '../../utils/speciesLinks.js';
 import { resolveSpeciesTaxon, extractTaxonFields, isCountableTaxon } from '../../utils/taxonomy.js';
 import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder';
 import { featureCollection, point, distance, circle, destination } from '@turf/turf';
@@ -44,6 +45,10 @@ export function mountWorkspace(root, model, options) {
     mapStyle: 'outdoors-v12',
     fields: { ...displayDefaults },
     ...JSON.parse(localStorage.getItem('workspace-display') || '{}'),
+  };
+  preferences.speciesLinks = {
+    ...Object.fromEntries(speciesLinkOptions.map((link) => [link.id, link.visible])),
+    ...preferences.speciesLinks,
   };
   const savePreferences = () =>
     localStorage.setItem('workspace-display', JSON.stringify(preferences));
@@ -1151,8 +1156,37 @@ export function mountWorkspace(root, model, options) {
     return planningCache;
   }
   const percent = (value) => (100 * value).toFixed(1) + '%';
+  let speciesBounds;
+  function renderSpeciesLinks(t) {
+    const links = speciesLinkOptions.filter((link) => preferences.speciesLinks[link.id]);
+    if (!links.length) return '';
+    const urls = speciesLinkUrls(t.code, data.region?.code, speciesBounds);
+    return (
+      '<span class="species-links">' +
+      links
+        .map((link) => {
+          const label = link.label + ' — ' + t.name + ' (opens in a new tab)';
+          return (
+            '<a href="' +
+            escape(urls[link.id]) +
+            '" target="_blank" rel="noopener noreferrer" title="' +
+            escape(label) +
+            '" aria-label="' +
+            escape(label) +
+            '"><i class="bi bi-' +
+            link.icon +
+            '" aria-hidden="true"></i></a>'
+          );
+        })
+        .join('') +
+      '</span>'
+    );
+  }
   function renderSpecies() {
     if (view !== 'species') return;
+    speciesBounds = speciesMapBounds(
+      (data.ebdLocations.length ? data.ebdLocations : stops).map((location) => location.coords),
+    );
     const stop = active(),
       a = aggregation(stop),
       recorded = !writable(),
@@ -1188,7 +1222,9 @@ export function mountWorkspace(root, model, options) {
             escape(t.name) +
             '</strong><span class="latin"> ' +
             escape(t.latin) +
-            '</span></td><td class="num">' +
+            '</span>' +
+            renderSpeciesLinks(t) +
+            '</td><td class="num">' +
             (planned
               ? '<i class="bi bi-star-fill target-star"></i>'
               : total
@@ -1365,6 +1401,7 @@ export function mountWorkspace(root, model, options) {
                 : synced && !t.seen
                   ? '<i class="bi bi-car-front-fill lifer-icon" title="Not yet on trip report"></i>'
                   : '') +
+            renderSpeciesLinks(t) +
             '</td>' +
             (stop ? '<td class="num">' + t.rank + '</td>' : '') +
             '<td class="num">' +
@@ -2052,6 +2089,14 @@ export function mountWorkspace(root, model, options) {
       preferences.fields[id] = e.target.value;
       savePreferences();
       applyStopDisplay();
+    };
+  }
+  for (const link of speciesLinkOptions) {
+    $('species-link-' + link.id).checked = preferences.speciesLinks[link.id];
+    $('species-link-' + link.id).onchange = (e) => {
+      preferences.speciesLinks[link.id] = e.target.checked;
+      savePreferences();
+      renderSpecies();
     };
   }
   $('reset-display').onclick = () => {

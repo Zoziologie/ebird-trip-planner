@@ -93,6 +93,7 @@ export const workspaceModel = (
     .sort();
   return {
     name: plan.name,
+    region: ebd?.region || { code: '', name: '' },
     timeZone: plan.timeZone,
     reportId: plan.reportId,
     start: dates[0] || new Date().toISOString().slice(0, 10),

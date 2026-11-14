@@ -2143,3 +2143,22 @@
 .trip-workspace-ui .report-layer-option[hidden] {
   display: none;
 }
+.trip-workspace-ui .species-links {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.trip-workspace-ui .species-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  text-decoration: none;
+}
+.trip-workspace-ui .species-links a:hover,
+.trip-workspace-ui .species-links a:focus-visible {
+  background: #e6eef2;
+}

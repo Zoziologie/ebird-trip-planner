@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { mountWorkspace } from './workspace/controller';
 import hotspotIcon from './workspace/report-hotspot.svg';
 import personalIcon from './workspace/report-personal.svg';
+import { speciesLinkOptions } from '../utils/speciesLinks.js';
 const props = defineProps({
   plan: Object,
   model: Object,
@@ -483,6 +484,23 @@ defineExpose({
             <option value="light-v11">Light</option>
           </select></label
         >
+      </section>
+      <section class="settings-section">
+        <details class="display-settings" open>
+          <summary>
+            <span><i class="bi bi-link-45deg" aria-hidden="true"></i> Species links</span>
+            <span class="small">This device</span>
+          </summary>
+          <label
+            v-for="link in speciesLinkOptions"
+            :key="link.id"
+            class="preference-row"
+            :for="'species-link-' + link.id"
+          >
+            <span><i :class="'bi bi-' + link.icon" aria-hidden="true"></i> {{ link.label }}</span>
+            <input :id="'species-link-' + link.id" type="checkbox" />
+          </label>
+        </details>
       </section>
       <section class="settings-section edit-only">
         <details class="display-settings">
