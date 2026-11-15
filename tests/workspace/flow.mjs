@@ -203,8 +203,11 @@ try {
   });
   await libraryPage.reload();
   await libraryPage.getByRole('button', { name: 'Trip settings', exact: true }).click();
-  await libraryPage.getByText('Advanced · time zone', { exact: true }).click();
-  await libraryPage.getByText('Detected: Asia/Muscat', { exact: true }).waitFor();
+  await libraryPage.locator('.timezone-settings summary').click();
+  assert.equal(
+    await libraryPage.locator('#workspace-time-zone').getAttribute('placeholder'),
+    'Asia/Muscat',
+  );
   await libraryPage.locator('#workspace-time-zone').fill('Europe/Paris');
   await libraryPage.getByRole('button', { name: 'Save time zone', exact: true }).click();
   await until(
@@ -241,9 +244,24 @@ try {
     has: libraryPage.getByRole('heading', { name: 'Raw EBD library trip', exact: true }),
   });
   await rawCard.locator('summary').click();
+  await libraryPage.getByRole('heading', { name: 'My trips', exact: true }).click();
+  assert.equal(await libraryPage.locator('.trip-card-menu[open]').count(), 0);
+  await rawCard.locator('summary').click();
+  await libraryPage.keyboard.press('Escape');
+  assert.equal(await libraryPage.locator('.trip-card-menu[open]').count(), 0);
+  await rawCard.locator('summary').click();
+  await libraryPage
+    .locator('.trip-card')
+    .filter({ has: libraryPage.getByRole('heading', { name: 'EBD library trip', exact: true }) })
+    .locator('summary')
+    .click();
+  assert.equal(await libraryPage.locator('.trip-card-menu[open]').count(), 1);
+  assert.equal(await rawCard.locator('details[open]').count(), 0);
+  await rawCard.locator('summary').click();
   const backupDownload = libraryPage.waitForEvent('download');
   await rawCard.getByRole('button', { name: 'Export trip (.ebirdtrip)', exact: true }).click();
   const backupPath = await (await backupDownload).path();
+  assert.equal(await libraryPage.locator('.trip-card-menu[open]').count(), 0);
   await libraryPage.locator('#trip-file-picker').setInputFiles({
     name: 'invalid.json',
     mimeType: 'application/json',
@@ -268,6 +286,19 @@ try {
     async () => (await libraryPage.locator('.trip-card').count()) === 3,
     'backup import keeps the original trip',
   );
+  const importedCard = libraryPage.locator('.trip-card').filter({
+    has: libraryPage.getByRole('heading', { name: 'Raw EBD library trip 2', exact: true }),
+  });
+  await importedCard.getByRole('button', { name: 'Open trip', exact: true }).click();
+  await libraryPage.getByRole('button', { name: 'Trip settings', exact: true }).click();
+  await libraryPage.locator('#workspace-name').fill(' ebd library TRIP ');
+  await libraryPage.getByRole('button', { name: 'Save trip name', exact: true }).click();
+  await libraryPage
+    .getByText('Choose a different trip name; this name is already used.', { exact: true })
+    .waitFor();
+  assert.equal((await state(libraryPage)).trip.name, 'Raw EBD library trip 2');
+  await libraryPage.getByLabel('Close settings', { exact: true }).click();
+  await libraryPage.getByRole('link', { name: 'My trips', exact: true }).click();
   // Older JSON archives retain stop IDs, notes, targets and report links through import.
   const older = {
     version: 1,
@@ -651,15 +682,31 @@ try {
   assert.match(await page.locator('.day').innerText(), /Mon,? 16 Feb/);
   assert.match(await page.locator('.day').innerText(), /1d3h34min driving/);
   assert.equal(await page.locator('.day button, button.day').count(), 0);
-  await page.locator('#datetime').fill('2026-02-18T06:00');
-  await page.locator('#datetime').dispatchEvent('change');
+  await page.getByLabel('Stop date', { exact: true }).focus();
+  await page.getByLabel('Stop date', { exact: true }).fill('2026-02-18');
+  assert.equal(await page.locator('.day').count(), 1, 'editing a date must not reorder stops');
+  await page.getByLabel('Stop time', { exact: true }).fill('22:00');
+  assert.equal(
+    await page.locator('.day').count(),
+    1,
+    'moving from date to time must not reorder stops',
+  );
+  await page.getByLabel('Stop time', { exact: true }).press('Enter');
   assert.equal(await page.locator('.day').count(), 2);
   assert.equal(await page.locator('.stop-row').count(), 2);
   assert.equal(await page.locator('.stop-row').first().isVisible(), true);
   assert.equal(await page.locator('.stop-row').last().isVisible(), true);
   assert.match(await page.locator('.day').last().innerText(), /Wed,? 18 Feb/);
-  await page.locator('#datetime').fill('2026-02-16T06:00');
-  await page.locator('#datetime').dispatchEvent('change');
+  await page.getByLabel('Stop date', { exact: true }).fill('2026-02-16');
+  await page.getByLabel('Stop time', { exact: true }).fill('06:00');
+  await page.getByLabel('Stop time', { exact: true }).focus();
+  await page.getByRole('textbox', { name: 'Stop name', exact: true }).focus();
+  await until(
+    async () =>
+      (await state(page)).visits.find((visit) => visit.name === 'Alpha stop').dateTime ===
+      '2026-02-16T06:00',
+    'date and time commit after leaving the timing fields',
+  );
   assert.equal(await page.getByLabel('Workspace trip', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Trip settings', exact: true }).click();
   assert.equal(await page.locator('#settings-dialog #life-upload').count(), 1);
@@ -668,7 +715,10 @@ try {
   assert.equal(await page.getByText('Download trip backup', { exact: true }).count(), 0);
   await page.getByLabel('Close settings', { exact: true }).click();
   await page.getByLabel('Stop type', { exact: true }).selectOption('Airport');
-  assert.equal(await page.locator('#datetime').isVisible(), true);
+  assert.equal(await page.getByLabel('Stop date', { exact: true }).isVisible(), true);
+  assert.equal(await page.getByLabel('Stop time', { exact: true }).isVisible(), true);
+  assert.equal(await page.locator('#stop-extra-details').isVisible(), false);
+  assert.equal(await page.locator('#remove').isVisible(), true);
   assert.equal(await page.locator('#note').isVisible(), true);
   for (const field of [
     'duration-field',
@@ -679,11 +729,17 @@ try {
   ])
     assert.equal(await page.locator('#' + field).isVisible(), false, field + ' hidden for airport');
   await page.getByLabel('Stop type', { exact: true }).selectOption('Birding');
+  assert.equal(await page.locator('#stop-extra-details').isVisible(), true);
   assert.equal(await page.locator('#duration').isVisible(), true);
   await waitSaved(page);
   // Display choices move existing inputs without editing the shared itinerary.
   const displayPlan = (await state(page)).sync.basePlan;
   await page.getByRole('button', { name: 'Trip settings', exact: true }).click();
+  await page
+    .locator('.display-settings')
+    .filter({ has: page.getByText('Stop display', { exact: true }) })
+    .locator('summary')
+    .click();
   await page.locator('#display-note-details').selectOption('default');
   await page.locator('#display-duration-field').selectOption('hidden');
   await page.getByLabel('Close settings', { exact: true }).click();
@@ -695,7 +751,12 @@ try {
   assert.equal(await page.locator('#stop-default-body #note').isVisible(), true);
   assert.equal(await page.locator('#duration').isVisible(), false);
   await page.getByRole('button', { name: 'Trip settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Reset display preferences', exact: true }).click();
+  await page
+    .locator('.display-settings')
+    .filter({ has: page.getByText('Stop display', { exact: true }) })
+    .locator('summary')
+    .click();
+  await page.locator('#reset-display').click();
   await page.getByLabel('Close settings', { exact: true }).click();
   assert.equal(await page.locator('#duration').isVisible(), true);
   assert.equal(await page.locator('#redo').isVisible(), false);
@@ -821,6 +882,27 @@ try {
     datasetRevision,
     'small edits must not re-upload the source dataset',
   );
+  await page.getByRole('link', { name: 'My trips', exact: true }).click();
+  await page.evaluate(() => localStorage.removeItem('firebaseCloudTrips'));
+  await page.reload();
+  await page.getByRole('heading', { name: 'Oman test', exact: true }).waitFor();
+  await until(
+    async () => (await page.getByText('Cloud autosave', { exact: true }).count()) === 1,
+    'durable cloud identity in library',
+  );
+  assert.equal(
+    await page
+      .locator('.trip-card')
+      .filter({ has: page.getByRole('heading', { name: 'Oman test', exact: true }) })
+      .count(),
+    1,
+  );
+  await page
+    .getByRole('heading', { name: 'Oman test', exact: true })
+    .locator('..')
+    .getByRole('button', { name: 'Open trip', exact: true })
+    .click();
+  await page.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
   // A cloud-only backup must join the current plan with the source dataset.
   const cloudLibraryContext = await context();
   const cloudLibraryPage = cloudLibraryContext.pages()[0];
@@ -1035,7 +1117,9 @@ try {
   const conflict = await state(page);
   assert.equal(conflict.recoveries[0].plan.stops[0].note, 'My offline conflict');
   assert.equal(conflict.visits[0].note, 'Co-traveler cloud edit');
-  await page.getByRole('button', { name: /^Review / }).click();
+  await page
+    .getByLabel('Local recovery copies', { exact: true })
+    .selectOption(String(conflict.recoveries[0].id));
   await page.getByText('My offline conflict', { exact: true }).waitFor();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download recovery copy', exact: true }).click();
@@ -1069,9 +1153,28 @@ try {
   );
   assert.equal((await state(page)).recoveries.length, 1);
   await page.reload();
-  await page.getByRole('button', { name: /^Review / }).waitFor();
+  await page.getByLabel('Local recovery copies', { exact: true }).waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({ path: 'output/playwright/workspace-editor.png', fullPage: true });
+  // Expiry only removes old local recovery copies, never the current plan or recent copies.
+  await page.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const tripId = localStorage.getItem('selectedTripId');
+    const { id, ...copy } = (
+      await db.workspaceRecovery.where('tripId').equals(tripId).toArray()
+    )[0];
+    await db.workspaceRecovery.add({ ...copy, createdAt: Date.now() - 15 * 86400000 });
+  });
+  await page.reload();
+  await page.getByLabel('Local recovery copies', { exact: true }).waitFor();
+  assert.equal((await state(page)).recoveries.length, 1);
+  await page
+    .getByLabel('Local recovery copies', { exact: true })
+    .selectOption(String(conflict.recoveries[0].id));
+  await page.getByRole('button', { name: 'Delete copy', exact: true }).click();
+  await until(async () => (await state(page)).recoveries.length === 0, 'manual recovery deletion');
+  assert.equal((await state(page)).visits[0].note, 'Commit whose acknowledgement was lost');
+
   await visitor.setViewportSize({ width: 390, height: 844 });
   await visitor.reload();
   await visitor.getByText('visitor view', { exact: true }).waitFor();

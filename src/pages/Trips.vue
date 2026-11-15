@@ -38,7 +38,7 @@ import { prepareWorkspace } from '../utils/workspaceLocal';
 import { enableTripCloud } from '../utils/tripCloudSetup';
 import { readTripArchive, restoreTripArchive } from '../utils/tripData';
 import { encodeTripArchive, decodeTripArchive, tripArchiveName } from '../utils/tripArchive';
-import { uniqueTripName } from '../utils/tripNames';
+import { uniqueTripName, uniqueTripLabels, tripCloudId } from '../utils/tripNames';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import AppAlert from '../components/AppAlert.vue';
 import zoziologieLogo from '../assets/zoziologie-logo.svg';
@@ -114,14 +114,14 @@ const duplicate = computed(() =>
   names.value.some((trip) => trip.name.trim().toLowerCase() === name.value.trim().toLowerCase()),
 );
 const library = computed(() => {
-  const linked = new Set(rows.value.map((trip) => cloudBindings.value[trip.id]?.id));
-  return [
+  const linked = new Set(rows.value.map((trip) => tripCloudId(trip, cloudBindings.value)));
+  return uniqueTripLabels([
     ...rows.value.map((trip) => ({
       ...trip,
       dates: tripDates(trip.visits, trip.timeZone, now.value),
       localId: trip.id,
-      cloudId: cloudBindings.value[trip.id]?.id || '',
-      cloud: cloudLibrary.value.find((item) => item.id === cloudBindings.value[trip.id]?.id),
+      cloudId: tripCloudId(trip, cloudBindings.value),
+      cloud: cloudLibrary.value.find((item) => item.id === tripCloudId(trip, cloudBindings.value)),
     })),
     ...cloudLibrary.value
       .filter((trip) => trip.revision && !linked.has(trip.id))
@@ -141,7 +141,7 @@ const library = computed(() => {
         cloudId: trip.id,
         cloud: trip,
       })),
-  ];
+  ]);
 });
 const groups = computed(() =>
   [
@@ -241,6 +241,8 @@ const finishNew = async (id) => {
   await openLocal(id);
 };
 const create = async (payload, onProgress = () => {}) => {
+  if (!name.value.trim() || duplicate.value)
+    throw new Error('Choose a different trip name; this name is already used.');
   const id = crypto.randomUUID(),
     now = Date.now();
   await db.transaction('rw', db.trips, db.ebd, db.checklists, db.comments, async () => {
@@ -364,6 +366,8 @@ const dropFile = (event) => {
 };
 const importTrip = () =>
   run(async () => {
+    if (!name.value.trim() || duplicate.value)
+      throw new Error('Choose a different trip name; this name is already used.');
     const id = await restoreTripArchive(
       {
         ...pendingImport.value,
@@ -457,10 +461,21 @@ const remove = () =>
     localStorage.setItem('firebaseCloudTrips', JSON.stringify(cloudBindings.value));
     removeDialog.value.close();
   });
+const closeTripMenus = (event) => {
+  for (const menu of document.querySelectorAll('.trip-card-menu[open]')) {
+    if (event.type === 'keydown') {
+      if (event.key !== 'Escape') return;
+      menu.querySelector('summary').focus();
+    } else if (menu.contains(event.target) && !event.target.closest('button')) continue;
+    menu.open = false;
+  }
+};
 const network = () => {
   online.value = navigator.onLine;
 };
 onMounted(async () => {
+  document.addEventListener('click', closeTripMenus);
+  document.addEventListener('keydown', closeTripMenus);
   window.addEventListener('online', network);
   window.addEventListener('offline', network);
   if (cloudConfigured)
@@ -471,6 +486,8 @@ onMounted(async () => {
   if (route.query.cloud) await router.replace({ path: '/workspace', query: route.query });
 });
 onBeforeUnmount(() => {
+  document.removeEventListener('click', closeTripMenus);
+  document.removeEventListener('keydown', closeTripMenus);
   window.removeEventListener('online', network);
   window.removeEventListener('offline', network);
 });
@@ -560,7 +577,7 @@ onBeforeUnmount(() => {
                     ></i>
                     {{ connection(item) }}</span
                   >
-                  <details class="trip-card-menu">
+                  <details class="trip-card-menu" name="trip-actions">
                     <summary :aria-label="'Options for ' + item.name">
                       <i aria-hidden="true" class="bi bi-three-dots"></i>
                     </summary>
@@ -569,21 +586,22 @@ onBeforeUnmount(() => {
                         :disabled="busy || (!item.localId && !online)"
                         @click="run(() => exportTrip(item))"
                       >
-                        Export trip (.ebirdtrip)</button
+                        <i class="bi bi-download" aria-hidden="true"></i> Export trip (.ebirdtrip)</button
                       ><button
                         v-if="item.localId && !item.sync?.cloudId && cloudUser"
                         :disabled="busy || !online"
                         @click="enable(item)"
                       >
-                        Enable cloud autosave</button
+                        <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Enable cloud
+                        autosave</button
                       ><button v-if="item.localId" :disabled="busy" @click="askRemove(item)">
-                        Remove device copy…</button
+                        <i class="bi bi-device-ssd" aria-hidden="true"></i> Remove device copy…</button
                       ><button
                         v-if="item.cloud?.owned"
                         :disabled="busy || !online"
                         @click="askRemove(item, true)"
                       >
-                        Delete cloud trip…
+                        <i class="bi bi-cloud-slash" aria-hidden="true"></i> Delete cloud trip…
                       </button>
                     </div>
                   </details>

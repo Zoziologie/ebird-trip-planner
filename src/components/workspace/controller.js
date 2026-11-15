@@ -1042,7 +1042,8 @@ export function mountWorkspace(root, model, options) {
     for (const [id, value] of Object.entries({
       name: s.name,
       type: s.type,
-      datetime: s.date,
+      'stop-date': s.date.slice(0, 10),
+      'stop-time': s.date.slice(11, 16),
       duration: s.duration,
       note: s.note,
     }))
@@ -1921,7 +1922,32 @@ export function mountWorkspace(root, model, options) {
     change('type', e.target.value);
     renderEditor();
   };
-  $('datetime').onchange = (e) => change('date', e.target.value);
+  // Native date/time controls emit changes while individual digits are still being typed.
+  const commitDateTime = () => {
+    if (
+      !$('stop-date').value ||
+      !$('stop-time').value ||
+      !$('stop-date').validity.valid ||
+      !$('stop-time').validity.valid
+    )
+      return;
+    const value = $('stop-date').value + 'T' + $('stop-time').value;
+    if (active() && active().date !== value) change('date', value);
+  };
+  $('datetime-field').addEventListener(
+    'focusout',
+    (event) => {
+      if (!$('datetime-field').contains(event.relatedTarget)) commitDateTime();
+    },
+    { signal: abort.signal },
+  );
+  for (const id of ['stop-date', 'stop-time'])
+    $(id).onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commitDateTime();
+      }
+    };
   $('duration').oninput = (e) => change('duration', Number(e.target.value));
   $('note').oninput = (e) => change('note', e.target.value);
   $('auto-name').onclick = () => {
@@ -2081,7 +2107,9 @@ export function mountWorkspace(root, model, options) {
       $('note-details').hidden = false;
     }
     // Removing a stop is always accessible, even when every optional field is hidden.
-    $('stop-extra-body').append($('remove'));
+    const birding = !active() || active().type === 'Birding';
+    $('stop-extra-details').hidden = !birding;
+    $(birding ? 'stop-extra-body' : 'stop-default-body').append($('remove'));
   }
   for (const id of Object.keys(displayDefaults)) {
     $('display-' + id).value = preferences.fields[id];

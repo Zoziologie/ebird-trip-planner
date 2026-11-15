@@ -18,10 +18,16 @@ import {
   cloudUser,
   cloudReady,
   cloudBindings,
+  cloudLibrary,
   bindCloudTrip,
 } from '../state/cloudTrips';
 import { workspaceStatus, workspaceReload, watchWorkspaceSync } from '../state/workspaceSync';
-import { prepareWorkspace, readWorkspacePlan, applyWorkspacePlan } from '../utils/workspaceLocal';
+import {
+  prepareWorkspace,
+  readWorkspacePlan,
+  applyWorkspacePlan,
+  recoveryRetentionMs,
+} from '../utils/workspaceLocal';
 import { enableTripCloud } from '../utils/tripCloudSetup';
 import { getWorkspaceCloud, workspaceUrl } from '../utils/workspaceCloud';
 import {
@@ -44,6 +50,7 @@ import { workspaceModel } from '../utils/workspaceModel';
 import { mergePlans, samePlan } from '../utils/workspacePlan';
 import { readPersonalLists, preparePersonalLists, savePersonalList } from '../utils/personalLists';
 import { tripTimeZone } from '../utils/tripTimeZone';
+import { findTripByName, tripCloudId } from '../utils/tripNames';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
 const model = shallowRef(null);
@@ -132,6 +139,7 @@ const shareStatus = ref('');
 const shareError = ref('');
 const copied = ref(false);
 const name = ref('');
+const nameError = ref('');
 const timeZone = ref('');
 const timeZones = Intl.supportedValuesOf('timeZone');
 const detectedTimeZone = computed(() => {
@@ -398,6 +406,19 @@ const copyLink = async () => {
 };
 const rename = () =>
   run(async () => {
+    name.value = name.value.trim();
+    const local = await db.trips.toArray();
+    const current = { id: selectedTripId.value, sync: state.value };
+    const currentCloudId = tripCloudId(current, cloudBindings.value);
+    const others = [
+      ...local.filter((trip) => trip.id !== selectedTripId.value),
+      ...cloudLibrary.value.filter((trip) => trip.revision && trip.id !== currentCloudId),
+    ];
+    nameError.value = '';
+    if (!name.value || findTripByName(others, name.value)) {
+      nameError.value = 'Choose a different trip name; this name is already used.';
+      return;
+    }
     await db.trips.update(selectedTripId.value, { name: name.value, updatedAt: Date.now() });
     await refreshTrips();
   });
@@ -409,6 +430,11 @@ const saveTimeZone = () =>
       timeZone: timeZone.value,
       updatedAt: Date.now(),
     });
+  });
+const deleteRecovery = () =>
+  run(async () => {
+    await db.workspaceRecovery.delete(recovery.value.id);
+    recovery.value = null;
   });
 const exportRecovery = (entry) =>
   download(
@@ -537,16 +563,21 @@ onBeforeUnmount(() => {
           class="m-2"
           @close="recoveryNoticeHidden = true"
         >
-          Device edits were preserved in {{ recoveries.length }} recovery
-          {{ recoveries.length === 1 ? 'copy' : 'copies' }}.
-          <button
-            v-for="entry in recoveries"
-            :key="entry.id"
-            class="btn btn-link btn-sm"
-            @click="recovery = entry"
+          {{ recoveries.length }} local recovery {{ recoveries.length === 1 ? 'copy' : 'copies' }} ·
+          kept 14 days.
+          <select
+            class="form-select form-select-sm d-inline-block w-auto ms-2"
+            aria-label="Local recovery copies"
+            :value="recovery?.id || ''"
+            @change="
+              recovery = recoveries.find((entry) => entry.id === Number($event.target.value))
+            "
           >
-            Review {{ new Date(entry.createdAt).toLocaleString() }}
-          </button>
+            <option value="" disabled>Review a copy…</option>
+            <option v-for="entry in recoveries" :key="entry.id" :value="entry.id">
+              #{{ entry.id }} · {{ new Date(entry.createdAt).toLocaleString() }}
+            </option>
+          </select>
         </AppAlert>
         <TripWorkspaceView
           ref="workspaceView"
@@ -570,15 +601,17 @@ onBeforeUnmount(() => {
             <div class="trip-metadata settings-inline-row">
               <label for="workspace-name">Trip name</label>
               <div class="settings-input-action">
-                <input id="workspace-name" v-model="name" /><button
-                  :disabled="busy"
-                  aria-label="Save trip name"
-                  @click="rename"
-                >
-                  Save
-                </button>
+                <input
+                  id="workspace-name"
+                  v-model="name"
+                  aria-describedby="workspace-name-error"
+                  @input="nameError = ''"
+                /><button :disabled="busy" aria-label="Save trip name" @click="rename">Save</button>
               </div>
             </div>
+            <p v-if="nameError" id="workspace-name-error" class="small text-danger" role="alert">
+              {{ nameError }}
+            </p>
           </template>
           <template #time-zone>
             <details class="timezone-settings">
@@ -617,16 +650,16 @@ onBeforeUnmount(() => {
               :disabled="busy"
               @click="enableCloud"
             >
-              Enable cloud autosave
+              <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Enable cloud autosave
             </button>
             <button v-if="!cloudUser && cloudConfigured" @click="run(() => signInCloud())">
-              Sign in to sync
+              <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Sign in to sync
             </button>
             <button v-if="state?.cloudId" class="edit-only" :disabled="busy" @click="sync.flush()">
-              Sync
+              <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync
             </button>
             <button v-if="state?.cloudId && owner" :disabled="busy" @click="openSharing">
-              Share
+              <i class="bi bi-share" aria-hidden="true"></i> Share
             </button>
           </template>
         </TripWorkspaceView>
@@ -746,8 +779,9 @@ onBeforeUnmount(() => {
       <template v-if="recovery"
         ><h2 class="h5">{{ recovery.name }}</h2>
         <p class="small">
-          These edits are kept on this device. Reapply the changes you want to the shared trip, or
-          download this copy for later.
+          Local to this device. Expires
+          {{ new Date(recovery.createdAt + recoveryRetentionMs).toLocaleDateString() }}. Download to
+          keep it.
         </p>
         <div class="recovery-stops">
           <div v-for="stop in recovery.plan.stops" :key="stop.id" class="border-bottom py-2">
@@ -761,7 +795,14 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <button class="btn btn-primary btn-sm mt-3" @click="exportRecovery(recovery)">
-          Download recovery copy
+          <i class="bi bi-download" aria-hidden="true"></i> Download recovery copy
+        </button>
+        <button
+          class="btn btn-outline-danger btn-sm mt-3 ms-2"
+          :disabled="busy"
+          @click="deleteRecovery"
+        >
+          <i class="bi bi-trash" aria-hidden="true"></i> Delete copy
         </button>
         <button class="btn btn-outline-secondary btn-sm mt-3 ms-2" @click="recovery = null">
           Close

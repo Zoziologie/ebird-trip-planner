@@ -173,13 +173,11 @@ defineExpose({
               </div>
               <div id="stop-default-body">
                 <div id="default-timing" class="timing-row">
-                  <label id="datetime-field"
-                    >Date & time
-                    <input
-                      id="datetime"
-                      type="datetime-local"
-                      aria-label="Stop date and time" /></label
-                  ><label id="duration-field"
+                  <div id="datetime-field" class="stop-datetime">
+                    <label>Date<input id="stop-date" type="date" aria-label="Stop date" /></label>
+                    <label>Time<input id="stop-time" type="time" aria-label="Stop time" /></label>
+                  </div>
+                  <label id="duration-field"
                     >Duration · hours
                     <input
                       id="duration"

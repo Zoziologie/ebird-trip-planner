@@ -9,8 +9,18 @@ export const readWorkspacePlan = (tripId) =>
     ),
   );
 
+export const recoveryRetentionMs = 14 * 24 * 60 * 60 * 1000;
+
+const pruneWorkspaceRecovery = (tripId, now = Date.now()) =>
+  db.workspaceRecovery
+    .where('tripId')
+    .equals(tripId)
+    .filter((entry) => entry.createdAt <= now - recoveryRetentionMs)
+    .delete();
+
 export const prepareWorkspace = (tripId) =>
-  db.transaction('rw', db.trips, db.visits, db.workspaceSync, async () => {
+  db.transaction('rw', db.trips, db.visits, db.workspaceSync, db.workspaceRecovery, async () => {
+    await pruneWorkspaceRecovery(tripId);
     const visits = await db.visits.where('tripId').equals(tripId).toArray();
     for (const visit of visits)
       if (!visit.workspaceId)
@@ -51,6 +61,7 @@ export const acceptCloudPlan = (tripId, cloud) =>
     const state = await db.workspaceSync.get(tripId);
     const local = await readWorkspacePlan(tripId);
     const { plan, conflicts } = mergePlans(state.basePlan, local, cloud.plan);
+    await pruneWorkspaceRecovery(tripId);
     let recoveryId = null;
     if (conflicts && !samePlan(local, state.basePlan)) {
       recoveryId = await db.workspaceRecovery.add({
