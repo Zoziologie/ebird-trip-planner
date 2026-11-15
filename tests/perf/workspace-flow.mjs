@@ -214,7 +214,7 @@ try {
           document
             .querySelector('[aria-label="Resize stop area north"]')
             .dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-        if (action === 'fullTrip') document.querySelector('#full-trip').click();
+        if (action === 'fullTrip') document.querySelector('#species-scope-trip').click();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         return Math.round(performance.now() - start);
       }, action);
