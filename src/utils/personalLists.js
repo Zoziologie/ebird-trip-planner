@@ -1,6 +1,6 @@
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { db } from '../data/db';
-import { cloudUser, cloudBindings } from '../state/cloudTrips';
+import { cloudUser, cloudBindings, cloudLibrary } from '../state/cloudTrips';
 import { initCloud } from './firebaseCloud';
 
 export const readPersonalLists = (tripId, accountId = cloudUser.value?.uid || '') =>
@@ -54,7 +54,9 @@ export const savePersonalList = (tripId, kind, taxa) =>
 export const syncPersonalLists = async (tripId, state) => {
   const accountId = cloudUser.value?.uid;
   if (!accountId || accountId !== state.accountId) return;
-  const datasetRevision = cloudBindings.value[tripId]?.revision;
+  const datasetRevision =
+    cloudBindings.value[tripId]?.revision ||
+    cloudLibrary.value.find((trip) => trip.id === state.cloudId)?.revision;
   if (!datasetRevision) return;
   const { database } = await initCloud();
   for (const kind of ['life', 'region']) {

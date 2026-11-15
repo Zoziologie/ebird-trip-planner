@@ -156,7 +156,10 @@ const visitor = ref(false);
 const privateTrip = ref(false);
 const binding = computed(() => cloudBindings.value[selectedTripId.value]);
 const owner = computed(
-  () => binding.value?.ownerUid === cloudUser.value?.uid && Boolean(cloudUser.value),
+  () =>
+    Boolean(cloudUser.value) &&
+    (cloudLibrary.value.find((trip) => trip.id === state.value?.cloudId)?.ownerUid ||
+      binding.value?.ownerUid) === cloudUser.value.uid,
 );
 const shareLink = computed(() => (state.value?.cloudId ? workspaceUrl(state.value.cloudId) : ''));
 const denied = (failure) => failure?.code === 'permission-denied';
