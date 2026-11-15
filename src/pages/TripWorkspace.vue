@@ -40,7 +40,11 @@ import {
   setCloudSharing,
   recordCloudActivity,
 } from '../utils/firebaseCloud';
-import { restoreTripArchive, readLocationChecklists } from '../utils/tripData';
+import {
+  restoreTripArchive,
+  readLocationChecklists,
+  readLocationDistances,
+} from '../utils/tripData';
 import { decodeTripArchive } from '../utils/tripArchive';
 import TripWorkspaceView from '../components/TripWorkspaceView.vue';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
@@ -97,6 +101,7 @@ const savePlan = (plan) => {
     throw failure;
   });
 };
+const loadLocationDistances = (ids) => readLocationDistances(selectedTripId.value, ids);
 const loadLocationChecklists = (id) => readLocationChecklists(selectedTripId.value, id);
 const saveReport = (report) => db.workspaceReports.put(report);
 const addDataset = async (payload, onProgress) => {
@@ -398,7 +403,10 @@ const removeEditor = (email) =>
     sharePublic.value,
     shareEditors.value.filter((item) => item !== email),
   );
-const setLinkAccess = (event) => saveSharing(event.target.value === 'public', shareEditors.value);
+const setLinkAccess = async (event) => {
+  await saveSharing(event.target.checked, shareEditors.value);
+  event.target.checked = sharePublic.value;
+};
 const copyLink = async () => {
   try {
     await navigator.clipboard.writeText(shareLink.value);
@@ -594,6 +602,7 @@ onBeforeUnmount(() => {
           :save-report="saveReport"
           :save-lists="saveLists"
           :load-checklists="loadLocationChecklists"
+          :load-distances="loadLocationDistances"
         >
           <template #library
             ><router-link to="/trips" class="library-link" aria-label="My trips" title="My trips"
@@ -660,11 +669,13 @@ onBeforeUnmount(() => {
             <button v-if="!cloudUser && cloudConfigured" @click="run(() => signInCloud())">
               <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Sign in to sync
             </button>
-            <button v-if="state?.cloudId" class="edit-only" :disabled="busy" @click="sync.flush()">
-              <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync
-            </button>
-            <button v-if="state?.cloudId && owner" :disabled="busy" @click="openSharing">
-              <i class="bi bi-share" aria-hidden="true"></i> Share
+            <button
+              v-if="state?.cloudId && owner"
+              class="header-action"
+              :disabled="busy"
+              @click="openSharing"
+            >
+              <i class="bi bi-share" aria-hidden="true"></i><span>Share</span>
             </button>
           </template>
         </TripWorkspaceView>
@@ -682,97 +693,90 @@ onBeforeUnmount(() => {
     />
     <dialog
       ref="shareDialog"
-      class="workspace-dialog border rounded shadow"
-      aria-label="Share trip"
+      class="workspace-dialog share-dialog"
+      aria-labelledby="share-title"
       @close="sharing = false"
     >
-      <h2 class="h5">Share trip</h2>
-      <p class="small text-body-secondary mb-2">
-        Everyone gets the same link. People you add below can edit; everyone else can only view it,
-        and only if you allow it.
-      </p>
-      <div class="input-group">
-        <input
-          :value="shareLink"
-          readonly
-          class="form-control"
-          aria-label="Trip link"
-          @focus="$event.target.select()"
-        />
-        <button class="btn btn-primary" @click="copyLink">
-          <i class="bi" :class="copied ? 'bi-check2' : 'bi-link-45deg'" aria-hidden="true"></i>
-          {{ copied ? 'Copied' : 'Copy link' }}
+      <h2 id="share-title">Share your trip</h2>
+      <div class="share-input-row">
+        <input :value="shareLink" readonly aria-label="Trip link" @focus="$event.target.select()" />
+        <button class="share-button" @click="copyLink">
+          <i class="bi" :class="copied ? 'bi-check2' : 'bi-copy'" aria-hidden="true"></i>
+          Copy link
         </button>
       </div>
 
-      <label for="share-link-access" class="form-label fw-semibold mt-4 mb-1"
-        >Who can open the link</label
-      >
-      <select
-        id="share-link-access"
-        class="form-select"
-        :value="sharePublic ? 'public' : 'restricted'"
-        :disabled="busy"
-        @change="setLinkAccess"
-      >
-        <option value="restricted">Only people added below</option>
-        <option value="public">Anyone with the link can view</option>
-      </select>
-      <p class="small text-body-secondary mt-1 mb-0">
-        {{
-          sharePublic
-            ? 'No sign-in needed to view. Viewers see the stops, notes and target species, not your eBird data.'
-            : 'Anyone else who opens the link is told the trip is private.'
-        }}
-      </p>
-
-      <h3 class="form-label fw-semibold mt-4 mb-1 fs-6">People who can edit</h3>
-      <ul class="list-group mb-2">
-        <li class="list-group-item d-flex align-items-center gap-2">
-          <span class="text-truncate flex-grow-1">{{ shareOwnerEmail }} (you)</span>
-          <span class="small text-body-secondary">Owner</span>
-        </li>
-        <li
-          v-for="email in shareEditors"
-          :key="email"
-          class="list-group-item d-flex align-items-center gap-2"
-        >
-          <span class="text-truncate flex-grow-1">{{ email }}</span>
-          <button
-            class="btn btn-sm btn-outline-danger"
-            :disabled="busy"
-            :aria-label="`Remove ${email}`"
-            @click="removeEditor(email)"
-          >
-            Remove
-          </button>
-        </li>
-      </ul>
-      <form v-if="shareEditors.length < maxEditors" class="input-group" @submit.prevent="addEditor">
+      <div class="share-public">
         <input
-          v-model="newEditor"
-          type="email"
-          class="form-control"
-          placeholder="name@gmail.com"
-          aria-label="Google account email"
-          autocomplete="off"
+          id="share-link-access"
+          type="checkbox"
+          :checked="sharePublic"
+          :disabled="busy"
+          aria-describedby="share-public-help"
+          @change="setLinkAccess"
         />
-        <button class="btn btn-outline-primary" :disabled="busy || !newEditor.trim()">Add</button>
-      </form>
-      <p class="small text-body-secondary mt-1">
-        They open the link and sign in with this Google account. No email is sent, so send them the
-        link yourself. Editors get a copy of the trip and its eBird data, but not your life lists.
-        Up to {{ maxEditors }} people.
-      </p>
+        <div>
+          <label for="share-link-access">Public trip</label>
+          <p id="share-public-help">
+            Anyone with the link can preview your trip. Only editors can modify it.
+          </p>
+        </div>
+      </div>
 
-      <div class="d-flex align-items-center gap-2 mt-3">
-        <span v-if="shareError" class="small text-danger flex-grow-1" role="alert">{{
-          shareError
-        }}</span>
-        <span v-else class="small text-body-secondary flex-grow-1" role="status">{{
-          shareStatus
-        }}</span>
-        <button class="btn btn-outline-secondary btn-sm" @click="sharing = false">Done</button>
+      <section class="share-editors" aria-labelledby="share-editors-title">
+        <h3 id="share-editors-title">Editors</h3>
+        <p>Adding someone’s Google email address gives them edit access.</p>
+        <form
+          v-if="shareEditors.length < maxEditors"
+          class="share-input-row"
+          @submit.prevent="addEditor"
+        >
+          <input
+            v-model="newEditor"
+            type="email"
+            placeholder="name@gmail.com"
+            aria-label="Google account email"
+            autocomplete="off"
+          />
+          <button class="share-button" :disabled="busy || !newEditor.trim()">
+            <i class="bi bi-person-plus" aria-hidden="true"></i>
+            Add editor
+          </button>
+        </form>
+        <ul class="share-people">
+          <li>
+            <span>{{ shareOwnerEmail }}</span>
+            <small>Owner (you)</small>
+          </li>
+          <li v-for="email in shareEditors" :key="email">
+            <span>{{ email }}</span>
+            <button
+              class="share-remove"
+              :disabled="busy"
+              :aria-label="`Remove ${email}`"
+              @click="removeEditor(email)"
+            >
+              <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <details class="share-details">
+        <summary>Details</summary>
+        <ul>
+          <li>Only Google accounts can be added as editors.</li>
+          <li>Access is immediate. There is nothing to accept and no notification is sent.</li>
+          <li>Editors must sign in with their Google account to open and edit the trip.</li>
+          <li>The same link above works for editing. Send it to your editors.</li>
+          <li>Your life and regional target lists stay personal and are not shared.</li>
+        </ul>
+      </details>
+
+      <div class="share-footer">
+        <span v-if="shareError" class="text-danger" role="alert">{{ shareError }}</span>
+        <span v-else role="status">{{ shareStatus }}</span>
+        <button class="share-button" @click="sharing = false">Done</button>
       </div>
     </dialog>
     <dialog
@@ -830,6 +834,159 @@ onBeforeUnmount(() => {
   overflow: auto;
   z-index: 1055;
   padding: 1.5rem;
+}
+.share-dialog {
+  border: 1px solid #d6e1dd;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #303b3c;
+  box-shadow: 0 12px 40px #19333826;
+  font-size: 14px;
+}
+.share-dialog::backdrop {
+  background: #19333855;
+}
+.share-dialog h2 {
+  margin: 0 0 20px;
+  font-size: 22px;
+  font-weight: 600;
+}
+.share-dialog h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.share-dialog p {
+  margin: 0 0 12px;
+  color: #596968;
+  line-height: 1.5;
+}
+.share-input-row {
+  display: flex;
+  gap: 8px;
+}
+.share-input-row input {
+  min-width: 0;
+  flex: 1;
+  padding: 9px 10px;
+  border: 1px solid #cbd8d4;
+  border-radius: 4px;
+  background: white;
+  color: inherit;
+  font: inherit;
+}
+.share-input-row input:focus-visible {
+  outline: 2px solid #386d70;
+  outline-offset: 1px;
+}
+.share-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid #386d70;
+  border-radius: 4px;
+  background: #386d70;
+  color: white;
+  font: inherit;
+  white-space: nowrap;
+}
+.share-button:hover {
+  background: #2d5c5f;
+}
+.share-button:disabled {
+  opacity: 0.5;
+}
+.share-public {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 22px 0;
+}
+.share-public input {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: #386d70;
+}
+.share-public label {
+  font-weight: 600;
+}
+.share-public p {
+  margin: 3px 0 0;
+}
+.share-editors {
+  border-top: 1px solid #d6e1dd;
+  padding-top: 20px;
+}
+.share-people {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 20px;
+}
+.share-people li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+.share-people li > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.share-people small {
+  color: #596968;
+  white-space: nowrap;
+}
+.share-remove {
+  border: 0;
+  border-radius: 4px;
+  padding: 8px;
+  background: transparent;
+  color: #596968;
+}
+.share-remove:hover {
+  background: #f8e0de;
+  color: #b6413a;
+}
+.share-details {
+  color: #596968;
+  font-size: 13px;
+}
+.share-details summary {
+  color: #386d70;
+}
+.share-details ul {
+  padding-left: 20px;
+  margin: 10px 0 0;
+  line-height: 1.6;
+}
+.share-details li + li {
+  margin-top: 5px;
+}
+.share-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid #d6e1dd;
+}
+.share-footer > span {
+  flex: 1;
+  font-size: 13px;
+  color: #596968;
+}
+@media (max-width: 480px) {
+  .share-dialog {
+    padding: 18px;
+  }
+  .share-input-row .share-button {
+    min-height: 44px;
+  }
 }
 .recovery-stops {
   max-height: 45vh;

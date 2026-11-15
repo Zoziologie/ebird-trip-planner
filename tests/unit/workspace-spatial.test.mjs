@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { distance, destination } from '@turf/turf';
-import { workspaceSpatialIndex } from '../../src/utils/workspaceSpatial.js';
+import {
+  workspaceSpatialIndex,
+  workspaceNamingLocation,
+} from '../../src/utils/workspaceSpatial.js';
 
 test('indexed areas match exact spherical membership, including date line and poles', () => {
   let seed = 42;
@@ -59,4 +62,26 @@ test('changing stop position/radius uses the new area without stale memberships'
     query([55, 18], 0.5).map((l) => l.id),
     ['c'],
   );
+});
+
+test('automatic naming uses the most checklists inside the stop radius, including incomplete lists', () => {
+  const locations = [
+    { id: 'near', name: 'Nearest', coords: [0, 0], count: 10, incompleteCount: 0 },
+    { id: 'popular', name: 'Popular', coords: [0.005, 0], count: 5, incompleteCount: 20 },
+    { id: 'outside', name: 'Outside', coords: [0.1, 0], count: 1000, incompleteCount: 0 },
+  ];
+  assert.equal(workspaceNamingLocation(locations, [0, 0], 1).name, 'Popular');
+  assert.equal(workspaceNamingLocation(locations, [0, 0], 0.1).name, 'Nearest');
+  assert.equal(workspaceNamingLocation(locations, [0.101, 0], 0.01).name, 'Outside');
+  assert.equal(workspaceNamingLocation([], [0, 0], 1), undefined);
+});
+
+test('automatic naming breaks checklist-count ties by proximity and then stable location ID', () => {
+  const locations = [
+    { id: 'b', coords: [0.005, 0], count: 20, incompleteCount: 0 },
+    { id: 'a', coords: [0.005, 0], count: 15, incompleteCount: 5 },
+    { id: 'c', coords: [0.008, 0], count: 20, incompleteCount: 0 },
+  ];
+  assert.equal(workspaceNamingLocation(locations, [0, 0], 1).id, 'a');
+  assert.equal(workspaceNamingLocation([...locations].reverse(), [0, 0], 1).id, 'a');
 });

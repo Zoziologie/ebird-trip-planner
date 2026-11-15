@@ -14,6 +14,7 @@ const props = defineProps({
   saveReport: Function,
   saveLists: Function,
   loadChecklists: Function,
+  loadDistances: Function,
 });
 const root = ref(null);
 const mapError = ref(false);
@@ -38,6 +39,7 @@ onMounted(() => {
       onReport: props.saveReport,
       onLists: props.saveLists,
       loadChecklists: props.loadChecklists,
+      loadDistances: props.loadDistances,
     });
   } catch (error) {
     if (!/failed to initialize webgl/i.test(error.message)) throw error;
@@ -96,11 +98,15 @@ defineExpose({
               >eBird trip report ↗</a
             ><slot name="actions" /><button
               id="settings-open"
+              class="header-action"
               aria-label="Trip settings"
               title="Trip settings"
             >
-              <i class="bi bi-gear" aria-hidden="true"></i></button
-            ><button id="mode" class="member-only">Preview</button>
+              <i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></button
+            ><button id="mode" class="member-only header-action">
+              <i id="mode-icon" class="bi bi-eye" aria-hidden="true"></i>
+              <span id="mode-label">Preview</span>
+            </button>
           </div>
         </details>
       </header>
@@ -115,8 +121,7 @@ defineExpose({
         <aside class="itinerary" aria-label="Itinerary and stop editor">
           <div class="itinerary-head">
             <div>
-              <strong id="sheet-title">Itinerary</strong
-              ><button id="full-trip" class="scope-action" aria-pressed="false">Full trip</button>
+              <strong id="sheet-title">Itinerary</strong>
             </div>
             <button id="sheet" aria-expanded="false" aria-label="Open itinerary">
               Open itinerary ↑
@@ -258,9 +263,13 @@ defineExpose({
             <div id="comments-panel" class="edit-only">
               <span>Observer list comments</span>
               <div class="comment-actions">
-                <button id="copy-comments">Copy</button
-                ><button id="download-comments">Download .md</button
-                ><span id="comment-feedback" class="sr-only" role="status"></span>
+                <button id="copy-comments" type="button">
+                  <i class="bi bi-copy" aria-hidden="true"></i> Copy
+                </button>
+                <button id="download-comments" type="button">
+                  <i class="bi bi-download" aria-hidden="true"></i> Download
+                </button>
+                <span id="comment-feedback" class="sr-only" role="status"></span>
               </div>
             </div>
           </section>
@@ -290,6 +299,14 @@ defineExpose({
                     <img id="basemap-satellite-image" alt="" loading="lazy" /><span>Satellite</span>
                   </button>
                 </div>
+                <label
+                  class="overlay-option access-option"
+                  title="Emphasize mapped paths, small roads, parking and viewpoints"
+                >
+                  <input id="highlight-access" type="checkbox" />
+                  <i class="bi bi-signpost-split" aria-hidden="true"></i>
+                  <span>Highlight access features</span>
+                </label>
                 <h4>Overlays</h4>
                 <label class="overlay-option"
                   ><input id="hotspots" type="checkbox" checked /><span
@@ -339,47 +356,57 @@ defineExpose({
             </div>
           </section>
           <section id="species-panel" hidden>
-            <div id="species-filters" class="species-filters edit-only">
-              <div class="lifer-filters">
-                <strong>Filters</strong
-                ><label
-                  ><input id="filter-life" type="checkbox" />
-                  <i class="bi bi-globe2 lifer-icon" aria-hidden="true"></i> Life</label
-                ><label
-                  ><input id="filter-region" type="checkbox" />
-                  <i class="bi bi-geo-alt-fill lifer-icon" aria-hidden="true"></i> Region</label
-                ><label
-                  ><input id="filter-trip" type="checkbox" />
-                  <i class="bi bi-car-front-fill lifer-icon" aria-hidden="true"></i> Trip</label
-                ><label
-                  ><input id="filter-interest" type="checkbox" />
-                  <i class="bi bi-star-fill target-star" aria-hidden="true"></i> Interest</label
-                ><span id="species-evidence" class="small"></span>
+            <div class="species-toolbar">
+              <div class="species-scope" role="group" aria-label="Species list scope">
+                <button id="species-scope-trip" aria-pressed="false">
+                  <i class="bi bi-car-front" aria-hidden="true"></i> Entire trip
+                </button>
+                <button id="species-scope-stop" aria-pressed="true">
+                  <i class="bi bi-geo-alt" aria-hidden="true"></i> Selected stop
+                </button>
               </div>
-              <div class="probability-filters">
-                <label
-                  >Whole trip (max)
-                  <input
-                    id="max-trip"
-                    aria-label="Maximum whole-trip chance"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step=".01"
-                    value=".95"
-                  /><output id="max-trip-label">95%</output></label
-                ><label
-                  ><span id="min-rate-name">This stop (min)</span
-                  ><input
-                    id="min-rate"
-                    aria-label="Minimum reporting rate at this stop or on average"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step=".01"
-                    value=".05"
-                  /><output id="min-rate-label">5%</output></label
-                >
+              <div id="species-filters" class="species-filters edit-only">
+                <div class="lifer-filters">
+                  <strong>Filters</strong
+                  ><label
+                    ><input id="filter-life" type="checkbox" />
+                    <i class="bi bi-globe2 lifer-icon" aria-hidden="true"></i> Life</label
+                  ><label
+                    ><input id="filter-region" type="checkbox" />
+                    <i class="bi bi-geo-alt-fill lifer-icon" aria-hidden="true"></i> Region</label
+                  ><label
+                    ><input id="filter-trip" type="checkbox" />
+                    <i class="bi bi-car-front-fill lifer-icon" aria-hidden="true"></i> Trip</label
+                  ><label
+                    ><input id="filter-interest" type="checkbox" />
+                    <i class="bi bi-star-fill target-star" aria-hidden="true"></i> Interest</label
+                  ><span id="species-evidence" class="small"></span>
+                </div>
+                <div class="probability-filters">
+                  <label
+                    >Whole trip (max)
+                    <input
+                      id="max-trip"
+                      aria-label="Maximum whole-trip chance"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step=".01"
+                      value=".95"
+                    /><output id="max-trip-label">95%</output></label
+                  ><label
+                    ><span id="min-rate-name">This stop (min)</span
+                    ><input
+                      id="min-rate"
+                      aria-label="Minimum reporting rate at this stop"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step=".01"
+                      value=".05"
+                    /><output id="min-rate-label">5%</output></label
+                  >
+                </div>
               </div>
             </div>
             <div class="species-table-scroll">

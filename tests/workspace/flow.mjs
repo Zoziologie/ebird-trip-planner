@@ -110,6 +110,10 @@ const context = async () => {
           ];
     await route.fulfill({ json });
   });
+  browser.on('page', (page) =>
+    page.on('pageerror', (error) => console.error('Browser page error:', error.stack)),
+  );
+  browser.pages()[0].on('pageerror', (error) => console.error('Browser page error:', error.stack));
   contexts.push(browser);
   return browser;
 };
@@ -181,7 +185,24 @@ try {
     await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).count(),
     0,
   );
-  await libraryPage.locator('#fileInput').setInputFiles(ebdFile);
+  await libraryPage.locator('#fileInput').setInputFiles({
+    ...ebdFile,
+    buffer: Buffer.from(
+      [
+        COLUMNS,
+        makeRow(),
+        makeRow({
+          'ALL SPECIES REPORTED': '0',
+          'SAMPLING EVENT IDENTIFIER': 'S2',
+          'LOCALITY ID': 'L2',
+          'LOCALITY TYPE': 'P',
+          LOCALITY: 'Incomplete marsh',
+        }),
+      ]
+        .map((row) => row.join('\t'))
+        .join('\n'),
+    ),
+  });
   assert.equal(
     await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).isEnabled(),
     false,
@@ -193,6 +214,19 @@ try {
   assert.equal(await libraryPage.evaluate(async () => window.workspaceTest.db.trips.count()), 0);
   await libraryPage.locator('#yearMaxFilter').fill('');
   await libraryPage.getByRole('button', { name: 'Create Trip', exact: true }).click();
+  await libraryPage.getByRole('button', { name: '+ Stop', exact: true }).waitFor();
+  const incomplete = await libraryPage.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const id = localStorage.getItem('selectedTripId');
+    return {
+      location: (await db.ebd.get(id)).locations.find((location) => location.locality_id === 'L2'),
+      checklists: (await db.checklists.get([id, 'L2'])).checklist,
+    };
+  });
+  assert.equal(incomplete.location.checklist_count_complete, 0);
+  assert.equal(incomplete.location.checklist_count_incomplete, 1);
+  assert.equal(incomplete.checklists[0].checklist_id, 'S2');
+  assert.equal(incomplete.checklists[0].all_species_reported, false);
   await libraryPage.getByRole('button', { name: '+ Stop', exact: true }).click();
   await until(async () => (await state(libraryPage)).visits.length === 1, 'EBD trip editing');
   assert.equal((await state(libraryPage)).trip.timeZone, '');
@@ -604,6 +638,62 @@ try {
   await noWebgl.getByRole('heading', { name: 'Oman test', exact: true }).waitFor();
   assert.equal((await state(noWebgl)).visits.length, 2);
   await noWebgl.close();
+  await page.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const ebd = await db.ebd.get('workspace-test');
+    delete ebd.locations[0].checklist_distances_km;
+    await db.ebd.put(ebd);
+    await db.checklists.put({
+      tripId: 'workspace-test',
+      localityId: 'L1',
+      checklist: [
+        { checklist_id: 'S1001', effort_distance_km: 0 },
+        { checklist_id: 'S1002', effort_distance_km: 1 },
+        { checklist_id: 'S1003', effort_distance_km: 3 },
+        { checklist_id: 'S1004' },
+      ],
+    });
+  });
+  await page.reload();
+  await page.getByRole('textbox', { name: 'Stop name', exact: true }).waitFor();
+  await openNotes(page);
+  await page.locator('#historical-stats').getByText('2.0 km', { exact: true }).waitFor();
+  assert.equal(await page.locator('.mapboxgl-ctrl-scale').count(), 1);
+  // Species scope is independent of itinerary selection and the map's Fit trip action.
+  await page.getByRole('button', { name: 'Species', exact: true }).click();
+  const speciesScope = page.getByRole('group', { name: 'Species list scope' });
+  await speciesScope.getByRole('button', { name: 'Entire trip', exact: true }).click();
+  assert.equal(await page.locator('#min-rate').isVisible(), false);
+  assert.equal(
+    await page.locator('#species-columns').getByText('Dataset', { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await page.getByRole('textbox', { name: 'Stop name', exact: true }).inputValue(),
+    'Alpha stop',
+  );
+  await speciesScope.getByRole('button', { name: 'Selected stop', exact: true }).click();
+  assert.equal(await page.locator('#min-rate').isVisible(), true);
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await page.getByRole('button', { name: 'Fit trip', exact: true }).click();
+  assert.equal(
+    await page.getByRole('textbox', { name: 'Stop name', exact: true }).inputValue(),
+    'Alpha stop',
+  );
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  const previewDetails = page.locator('#stop-list .stop-row.active + .preview-stop-details[open]');
+  await previewDetails.getByText('Osprey', { exact: true }).waitFor();
+  assert.equal(await page.locator('#selection-stats').isVisible(), false);
+  assert.equal(await page.locator('#visitor-details').isVisible(), false);
+  await page.getByRole('button', { name: 'Edit trip', exact: true }).click();
+
+  await page.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const ebd = await db.ebd.get('workspace-test');
+    ebd.locations[0].checklist_distances_km = [1];
+    await db.ebd.put(ebd);
+    await db.checklists.delete(['workspace-test', 'L1']);
+  });
   await page.getByRole('button', { name: 'Enable cloud autosave', exact: true }).click();
   await waitSaved(page);
   assert.equal(
@@ -622,6 +712,8 @@ try {
     const query = new URL(route.request().url()).searchParams;
     assert.equal(query.get('overview'), 'full');
     assert.equal(query.get('geometries'), 'polyline6');
+    assert.equal(query.get('arrive_by'), '2026-02-16T06:00:00Z');
+    assert.equal(query.get('radiuses'), '1000;1000');
     await route.fulfill({
       json: {
         routes: [
@@ -922,16 +1014,25 @@ try {
   assert.equal(cloudBackup.trip.tripReportId, '468402');
   // Public sharing uses only the plan; anonymous viewers never fetch an archive.
   await page.getByRole('button', { name: 'Share', exact: true }).click();
-  await page.getByLabel('Who can open the link').selectOption('public');
+  assert.equal(
+    await page.getByRole('checkbox', { name: 'Public trip', exact: true }).isChecked(),
+    true,
+  );
+  await page.getByRole('checkbox', { name: 'Public trip', exact: true }).uncheck();
   await page
-    .getByRole('dialog', { name: 'Share trip' })
+    .getByRole('dialog', { name: 'Share your trip' })
+    .getByText('Saved', { exact: true })
+    .waitFor();
+  await page.getByRole('checkbox', { name: 'Public trip', exact: true }).check();
+  await page
+    .getByRole('dialog', { name: 'Share your trip' })
     .getByText('Saved', { exact: true })
     .waitFor();
   await page.getByLabel('Google account email').fill('workspace-editor@example.com');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add editor', exact: true }).click();
   await page.getByRole('button', { name: 'Remove workspace-editor@example.com' }).waitFor();
   await page
-    .getByRole('dialog', { name: 'Share trip' })
+    .getByRole('dialog', { name: 'Share your trip' })
     .screenshot({ path: 'output/playwright/workspace-share-dialog.png' });
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   const visitorContext = await context();
@@ -1145,11 +1246,11 @@ try {
     });
     await publishWorkspacePlan(state.cloudId, state.revision, commitId, plan);
   });
-  await page.getByRole('button', { name: 'Sync', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Sync', exact: true }).count(), 0);
   await until(
     async () =>
       (await state(page)).sync.basePlan.stops[0].note === 'Commit whose acknowledgement was lost',
-    'lost-ack recovery',
+    'automatic lost-ack recovery',
   );
   assert.equal((await state(page)).recoveries.length, 1);
   await page.reload();
@@ -1188,9 +1289,9 @@ try {
   });
   // Revocation blocks the cloud, but must not hide an existing device copy.
   await page.getByRole('button', { name: 'Share', exact: true }).click();
-  await page.getByLabel('Who can open the link').selectOption('restricted');
+  await page.getByRole('checkbox', { name: 'Public trip', exact: true }).uncheck();
   await page
-    .getByRole('dialog', { name: 'Share trip' })
+    .getByRole('dialog', { name: 'Share your trip' })
     .getByText('Saved', { exact: true })
     .waitFor();
   await page.getByRole('button', { name: 'Remove workspace-editor@example.com' }).click();
@@ -1227,6 +1328,7 @@ try {
       json: route.request().url().includes('/styles/')
         ? {
             version: 8,
+            glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
             sources: {},
             layers: [
               { id: 'background', type: 'background', paint: { 'background-color': '#e5ece6' } },
@@ -1250,7 +1352,9 @@ try {
           longitude: 0,
           latitude: 20,
           locality_hotspot: false,
-          checklist_count: 2,
+          checklist_count: 0,
+          checklist_count_complete: 0,
+          checklist_count_incomplete: 7,
           species_checklist_counts: [],
         },
       ],
@@ -1258,10 +1362,12 @@ try {
     await db.checklists.put({
       tripId: 'popup',
       localityId: 'Lpersonal',
-      checklist: [
-        { checklist_id: 'S123', date: '2026-11-15', time: '06:30' },
-        { checklist_id: 'S124', date: '2026-11-14', time: '07:00' },
-      ],
+      checklist: Array.from({ length: 7 }, (_, i) => ({
+        checklist_id: 'S' + (123 + i),
+        date: '2026-11-' + String(15 - i).padStart(2, '0'),
+        time: '06:30',
+        all_species_reported: false,
+      })),
     });
     localStorage.setItem('selectedTripId', 'popup');
   });
@@ -1271,20 +1377,115 @@ try {
   await popupPage.locator('#layers > summary').click();
   const canvas = await popupPage.locator('#map canvas').boundingBox();
   await until(async () => {
+    await popupPage.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    return (await popupPage.locator('.hover-popup .location-checklists a').count()) === 5;
+  }, 'personal location hover checklists');
+  const hoverSize = await popupPage.locator('.mapboxgl-popup-content').boundingBox();
+
+  await until(async () => {
     if (await popupPage.locator('.pinned-popup a[href="https://ebird.org/checklist/S123"]').count())
       return true;
     await popupPage.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
     return false;
   }, 'personal location checklist links');
-  assert.equal(await popupPage.locator('.pinned-popup .location-checklists a').count(), 2);
+  assert.equal(await popupPage.locator('.pinned-popup .location-checklists a').count(), 5);
+  assert.equal(
+    await popupPage.locator('.pinned-popup .location-checklists a').first().innerText(),
+    'S123',
+  );
+  assert.equal(await popupPage.getByTitle('7 incomplete checklists', { exact: true }).count(), 1);
+  const pinnedSize = await popupPage.locator('.mapboxgl-popup-content').boundingBox();
+  assert.equal(pinnedSize.width, hoverSize.width);
+  assert.equal(pinnedSize.height, hoverSize.height);
+  await popupPage
+    .locator('.mapboxgl-popup-content')
+    .screenshot({ path: 'output/playwright/personal-location-popup.png' });
+  assert.doesNotMatch(
+    await popupPage.locator('.pinned-popup').innerText(),
+    /Personal location|0 species|2026-/,
+  );
+  assert.equal(await popupPage.locator('.pinned-popup .location-dot.personal').count(), 1);
   assert.equal(
     await popupPage.locator('.pinned-popup a').last().getAttribute('href'),
-    'https://ebird.org/checklist/S124',
+    'https://ebird.org/checklist/S127',
   );
   assert.equal(
     await popupPage.getByRole('button', { name: 'Rename stop', exact: true }).count(),
     0,
   );
+  await popupPage.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const ebd = await db.ebd.get('popup');
+    ebd.locations[0].locality_hotspot = true;
+    ebd.locations[0].locality = 'Camino a Laguna de Muyil';
+    await db.comments.put({
+      tripId: 'popup',
+      entries: [
+        {
+          locality_id: 'Lpersonal',
+          checklist_id: 'S123',
+          date: '2026-11-15',
+          checklist_comment: 'Birds by the boardwalk',
+        },
+      ],
+    });
+
+    ebd.locations[0].checklist_count = 114;
+    ebd.locations[0].checklist_count_complete = 100;
+    ebd.locations[0].checklist_count_incomplete = 14;
+    ebd.locations[0].species_checklist_counts = Array.from({ length: 205 }, (_, i) => [
+      'sp' + i,
+      1,
+    ]);
+    await db.ebd.put(ebd);
+  });
+  await popupPage.reload();
+  await until(async () => {
+    await popupPage.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    return (await popupPage.locator('.hover-popup .location-name').count()) === 1;
+  }, 'hotspot name link');
+  assert.equal(
+    await popupPage.locator('.location-name').getAttribute('href'),
+    'https://ebird.org/hotspot/Lpersonal',
+  );
+  assert.equal(await popupPage.locator('.location-checklists').count(), 0);
+  assert.match(await popupPage.locator('.location-popup').innerText(), /205 species/);
+  assert.match(await popupPage.locator('.location-popup').innerText(), /114 checklists/);
+  await popupPage
+    .locator('.mapboxgl-popup-content')
+    .screenshot({ path: 'output/playwright/hotspot-popup.png' });
+  assert.equal(
+    await popupPage
+      .locator('.hover-popup')
+      .getByRole('button', { name: 'Download', exact: true })
+      .count(),
+    0,
+  );
+  await popupPage.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  const hotspotDownload = popupPage.waitForEvent('download');
+  await popupPage
+    .locator('.pinned-popup')
+    .getByRole('button', { name: 'Download', exact: true })
+    .click();
+  await popupPage
+    .locator('.pinned-popup')
+    .getByRole('button', { name: 'Download', exact: true })
+    .locator('.bi-check-lg')
+    .waitFor();
+  const markdown = await readFile(await (await hotspotDownload).path(), 'utf8');
+  assert.match(markdown, /Camino a Laguna de Muyil/);
+  assert.match(markdown, /Birds by the boardwalk/);
+  assert.match(markdown, /https:\/\/ebird.org\/checklist\/S123/);
+  await popupPage.locator('.mapboxgl-popup-close-button').click();
+  await popupPage.locator('#layers > summary').click();
+  await popupPage.getByLabel('Highlight access features').check();
+  await popupPage.locator('#basemap-satellite').click();
+  assert.equal(await popupPage.locator('#basemap-satellite').getAttribute('aria-pressed'), 'true');
+  assert.equal(await popupPage.getByLabel('Highlight access features').isChecked(), true);
+  await popupPage.getByLabel('Highlight access features').uncheck();
+  assert.equal(await popupPage.locator('#basemap-satellite').getAttribute('aria-pressed'), 'true');
+  assert.equal(await popupPage.locator('#overlay-habitat').count(), 0);
+  await popupPage.screenshot({ path: 'output/playwright/access-basemap-selector.png' });
   assert.deepEqual(errors, []);
   passed = true;
   console.log(

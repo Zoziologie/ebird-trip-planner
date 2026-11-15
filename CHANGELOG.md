@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 2.0.0-beta.5 — 2026-11-15
+
+### Planning and species
+
+- Choose Entire trip or Selected stop beside the species filters without changing the map or itinerary selection. Entire trip includes low-frequency species and drops the average-rate filter and Dataset column.
+- Open regional eBird species pages, maps, Birds of the World and Macaulay media from configurable species links. Stop map links use the selected stop’s area.
+- Name stops automatically from the location with the most complete and incomplete checklists inside their radius, using distance to break ties.
+- Keep date and time edits separate and reorder stops after typing finishes. Preview shows notes and starred species beneath the selected stop.
+
+### Maps and driving
+
+- Offer optional access highlights on Map and Satellite basemaps, emphasizing paths, roads, parking, viewpoints and other useful mapped facilities, with a compact distance scale.
+- Use planned arrival times and the trip time zone for driving estimates, allow road snapping within one kilometre and warn when the route ends more than 150 metres from a stop.
+- Show a spinner during routing and explain unavailable road connections; retry disconnected pins only after their positions change.
+- Simplify location popups with coloured markers, separate species and checklist rows, compact completeness counts, hotspot name links and up to five personal checklist links.
+- Copy or download hotspot observer comments on demand, with icon feedback and consistent action buttons.
+
+### Trips and sharing
+
+- Keep trip cards in itinerary-date order while cloud saves refresh, and retain known cloud plans during metadata updates.
+- Simplify sharing to one link, a Public trip checkbox and a direct-access editor list. New cloud trips are public by default; existing private trips retain their setting. Personal life and regional target lists remain private.
+- Recover median travel distances from older datasets while excluding zero, missing and invalid distances. Preserve incomplete checklist links and comments without including their observations in reporting rates.
+- Remove the redundant manual Sync button and keep cloud autosave automatic.
+
 ## 2.0.0-beta.4 — 2026-11-10
 
 ### Sharing and cloud

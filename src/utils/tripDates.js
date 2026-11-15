@@ -23,6 +23,16 @@ export const tripDates = (stops, timeZone, now = new Date()) => {
       }).format(new Date(`${date}T00:00:00Z`));
   return {
     group: today < start ? 'upcoming' : today > end ? 'past' : 'current',
+    start,
+    end,
     label: start === end ? format(start) : `${format(start)} – ${format(end)}`,
   };
 };
+
+// The library order follows the itinerary dates so autosaves cannot move cards.
+export const compareTripCards = (a, b) =>
+  (a.dates.group === 'past' && b.dates.group === 'past'
+    ? b.dates.end.localeCompare(a.dates.end)
+    : (a.dates.start || '').localeCompare(b.dates.start || '')) ||
+  a.name.localeCompare(b.name) ||
+  (a.localId || a.cloudId).localeCompare(b.localId || b.cloudId);

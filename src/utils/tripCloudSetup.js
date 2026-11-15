@@ -5,7 +5,7 @@ import { encodeTripArchive } from './tripArchive';
 import { readWorkspacePlan, prepareWorkspace, acknowledgePlan } from './workspaceLocal';
 import { datasetArchive, samePlan, validatePlanSize } from './workspacePlan';
 import { getWorkspaceCloud, createWorkspaceCloud } from './workspaceCloud';
-import { saveCloudTrip } from './firebaseCloud';
+import { saveCloudTrip, setCloudSharing } from './firebaseCloud';
 
 // Upload source data once; subsequent edits use the compact plan sync coordinator.
 export const enableTripCloud = async (tripId) => {
@@ -46,6 +46,7 @@ export const enableTripCloud = async (tripId) => {
     savedVisitCount: 0,
   });
   const cloud = await createWorkspaceCloud(source.id, source.revision, plan, crypto.randomUUID());
+  if (!binding) await setCloudSharing(source.id, true, []);
   await db.workspaceSync.update(tripId, { cloudId: source.id, accountId: cloudUser.value.uid });
   if (samePlan(plan, cloud.plan)) await acknowledgePlan(tripId, cloud);
   else

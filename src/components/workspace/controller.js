@@ -11,12 +11,13 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 
-import { workspaceSpatialIndex } from '../../utils/workspaceSpatial';
+import { workspaceSpatialIndex, workspaceNamingLocation } from '../../utils/workspaceSpatial';
 import { workspaceModelPlan } from '../../utils/workspaceModel';
 import { tripTimeZone } from '../../utils/tripTimeZone';
 import polyline from '@mapbox/polyline';
+import { applyAccessBasemap } from '../../utils/accessBasemap.js';
 import { compactRouteGeometry } from '../../utils/routeGeometry';
-import { retainWorkspaceRoutes } from '../../utils/workspaceRoutes';
+import { retainWorkspaceRoutes, routeArrivalTime } from '../../utils/workspaceRoutes';
 import { normalizeWorkspaceReportId, loadWorkspaceReport } from '../../utils/workspaceReport';
 
 // The reviewed workspace interaction controller, mounted and disposed by Vue.
@@ -63,6 +64,7 @@ export function mountWorkspace(root, model, options) {
   let stops = structuredClone(data.stops),
     selected = stops.find((s) => s.type === 'Birding')?.id || stops[0]?.id || 0,
     view = options.initialView || 'map',
+    speciesScope = 'stop',
     preview = false,
     basemap = 'outdoor',
     layer = '',
@@ -87,6 +89,8 @@ export function mountWorkspace(root, model, options) {
     typingAt = 0;
   let routes = new Map(stops.filter((s) => s.route.geometry).map((s) => [s.id, s.route]));
   const markers = new Map();
+  const pendingRoutes = new Set(),
+    routeErrors = new Map();
   let areaHandles = [],
     dragging = false,
     popup = null,
@@ -227,6 +231,7 @@ export function mountWorkspace(root, model, options) {
     zoom: 5.2,
   });
   map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  map.addControl(new mapboxgl.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
   map.addControl(
     new mapboxgl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
@@ -281,7 +286,7 @@ export function mountWorkspace(root, model, options) {
       if (!event.target.closest('#layers')) $('layers').open = false;
       if (
         $('workspace-layout').classList.contains('compact-header') &&
-        !event.target.closest('.header-menu')
+        (!event.target.closest('.header-menu') || event.target.closest('.header-action'))
       )
         root.querySelector('.header-menu').open = false;
     },
@@ -300,6 +305,7 @@ export function mountWorkspace(root, model, options) {
           map.setPaintProperty(layer.id, 'fill-opacity', 0.55);
       }
     }
+    if (preferences.highlightAccess) applyAccessBasemap(map, basemap === 'satellite');
     for (const name of ['hotspot', 'personal']) {
       const image = new Image(32, 40);
       image.src = name === 'hotspot' ? hotspotIcon : personalIcon;
@@ -357,6 +363,7 @@ export function mountWorkspace(root, model, options) {
             id: l.id,
             name: l.name,
             count: l.count,
+            incomplete: l.incompleteCount,
             species: Object.keys(l.counts).length,
             hotspot: l.hotspot,
           }),
@@ -769,29 +776,106 @@ export function mountWorkspace(root, model, options) {
   function showPopup(feature, pinned) {
     const p = feature.properties,
       id = feature.layer.id;
+    const key = id + ':' + (p.id || feature.geometry.coordinates.join(','));
+    if (pinned && popup && hoverKey === key) {
+      popupPinned = true;
+      popup.removeClassName('hover-popup').addClassName('pinned-popup');
+      const commentActions = popup.getElement().querySelector('.hotspot-comments');
+      if (commentActions) commentActions.hidden = false;
+      return;
+    }
     closePopup();
     popupPinned = pinned;
-    hoverKey = id + ':' + (p.id || feature.geometry.coordinates.join(','));
+    hoverKey = key;
     const box = document.createElement('div');
     box.className = 'location-popup';
-    if (id === 'ebd')
+    if (id === 'ebd') {
+      const name = p.hotspot
+        ? '<a class="location-name" target="_blank" rel="noopener noreferrer" href="https://ebird.org/hotspot/' +
+          escape(p.id) +
+          '">' +
+          escape(p.name) +
+          '</a>'
+        : '<span>' + escape(p.name) + '</span>';
       box.innerHTML =
-        '<strong>' +
-        escape(p.name) +
-        '</strong><div>' +
-        p.species +
-        ' species · ' +
-        p.count +
-        ' checklists</div><span class="small">' +
-        (p.hotspot ? 'Hotspot' : 'Personal location') +
-        '</span>' +
-        (!pinned ? '<div class="small">Click for checklists</div>' : '') +
-        (pinned && p.hotspot
-          ? '<a target="_blank" rel="noopener" href="https://ebird.org/hotspot/' +
-            escape(p.id) +
-            '">Open in eBird ↗</a>'
-          : '');
-    else if (id === 'report-pins')
+        '<strong class="location-title"><span class="location-dot ' +
+        (p.hotspot ? 'hotspot' : 'personal') +
+        '" aria-hidden="true"></span>' +
+        name +
+        '</strong>' +
+        (p.count
+          ? '<div class="location-stat"><i class="bi bi-feather" aria-hidden="true"></i>' +
+            p.species +
+            ' species</div>'
+          : '') +
+        '<div class="location-stat"><i class="bi bi-list-ul" aria-hidden="true"></i>' +
+        (p.count + (p.incomplete || 0)) +
+        ' checklists' +
+        (p.count
+          ? '<span class="checklist-kind" title="' +
+            p.count +
+            ' complete checklists" aria-label="' +
+            p.count +
+            ' complete checklists"><i class="bi bi-check-circle" aria-hidden="true"></i>' +
+            p.count +
+            '</span>'
+          : '') +
+        (p.incomplete
+          ? '<span class="checklist-kind" title="' +
+            p.incomplete +
+            ' incomplete checklists" aria-label="' +
+            p.incomplete +
+            ' incomplete checklists"><i class="bi bi-circle-half" aria-hidden="true"></i>' +
+            p.incomplete +
+            '</span>'
+          : '') +
+        '</div>';
+      const entries = p.hotspot && commentsByLocation.get(String(p.id));
+      if (entries?.length) {
+        const actions = document.createElement('div');
+        actions.className = 'hotspot-comments';
+        actions.hidden = !pinned;
+        actions.innerHTML =
+          '<span>Observer list comments</span>' +
+          '<div class="comment-actions">' +
+          '<button type="button"><i class="bi bi-copy" aria-hidden="true"></i> Copy</button>' +
+          '<button type="button"><i class="bi bi-download" aria-hidden="true"></i> Download</button>' +
+          '<span class="sr-only" role="status"></span></div>';
+        const [copy, download] = actions.querySelectorAll('button');
+        const status = actions.querySelector('[role="status"]');
+        const markdown = () =>
+          buildCommentMarkdown({
+            heading: p.name + ' — observer comments',
+            entries,
+            locationsById: new Map([
+              [
+                String(p.id),
+                {
+                  locality: p.name,
+                  latitude: feature.geometry.coordinates[1],
+                  longitude: feature.geometry.coordinates[0],
+                },
+              ],
+            ]),
+            speciesNameByCode: new Map(data.taxa.map((t) => [t.code, t.name])),
+          });
+        copy.onclick = async () => {
+          const copied = await copyMarkdown(markdown());
+          showCommentFeedback(
+            copy,
+            status,
+            'bi-copy',
+            copied ? 'Copied to clipboard' : 'Could not copy',
+            copied,
+          );
+        };
+        download.onclick = () => {
+          downloadMarkdown('observer-comments-' + p.id + '.md', markdown());
+          showCommentFeedback(download, status, 'bi-download', 'Download started');
+        };
+        box.append(actions);
+      }
+    } else if (id === 'report-pins')
       box.innerHTML =
         '<strong>' +
         escape(p.name) +
@@ -815,7 +899,8 @@ export function mountWorkspace(root, model, options) {
         p.count +
         ' checklists</div>';
     popup = new mapboxgl.Popup({
-      closeButton: pinned,
+      closeButton: true,
+      focusAfterOpen: false,
       closeOnClick: false,
       offset: 14,
       maxWidth: '260px',
@@ -824,33 +909,29 @@ export function mountWorkspace(root, model, options) {
       .setLngLat(feature.geometry.coordinates)
       .setDOMContent(box)
       .addTo(map);
-    if (id === 'ebd' && pinned && options.loadChecklists) {
+    if (id === 'ebd' && !p.hotspot && options.loadChecklists) {
       const lists = document.createElement('div');
       lists.className = 'location-checklists';
-      lists.textContent = 'Loading checklists…';
+      lists.textContent = '…';
       box.append(lists);
       options
         .loadChecklists(p.id)
         .then((checklists) => {
-          lists.innerHTML =
-            checklists
-              .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
-              .map(
-                (checklist) =>
-                  '<a target="_blank" rel="noopener noreferrer" href="https://ebird.org/checklist/' +
-                  encodeURIComponent(checklist.id) +
-                  '">' +
-                  escape(checklist.date) +
-                  ' ' +
-                  escape(checklist.time || '') +
-                  ' · ' +
-                  escape(checklist.id) +
-                  ' ↗</a>',
-              )
-              .join('') || 'No checklist details in this dataset.';
+          lists.innerHTML = checklists
+            .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
+            .slice(0, 5)
+            .map(
+              (checklist) =>
+                '<a target="_blank" rel="noopener noreferrer" href="https://ebird.org/checklist/' +
+                encodeURIComponent(checklist.id) +
+                '">' +
+                escape(checklist.id) +
+                '</a>',
+            )
+            .join('');
         })
         .catch(() => {
-          lists.textContent = 'Could not load checklists. Close and reopen to retry.';
+          lists.textContent = 'Checklist IDs unavailable';
         });
     }
     popup.on('close', () => {
@@ -903,6 +984,11 @@ export function mountWorkspace(root, model, options) {
     if (next === 'map') requestAnimationFrame(() => map.resize());
   }
   function choose(id, event = {}) {
+    if (speciesScope === 'trip') {
+      speciesSort = 'rank';
+      speciesDirection = 1;
+    }
+    speciesScope = 'stop';
     if (event.shiftKey && selected && writable()) {
       const a = stops.findIndex((s) => s.id === selected),
         b = stops.findIndex((s) => s.id === id);
@@ -930,7 +1016,9 @@ export function mountWorkspace(root, model, options) {
       if (active()) map.easeTo({ center: active().coords, zoom: 12, duration: 300 });
       else fitTrip();
     }
-    if ($('workspace-layout').classList.contains('mobile') && !writable()) toggleSheet(false);
+    const previewStopClick = preview && event.currentTarget?.classList.contains('stop-button');
+    if ($('workspace-layout').classList.contains('mobile') && !writable() && !previewStopClick)
+      toggleSheet(false);
   }
   function renderList() {
     const list = $('stop-list'),
@@ -938,7 +1026,6 @@ export function mountWorkspace(root, model, options) {
     root.querySelector('.itinerary').append($('editor'));
     $('single-edit').prepend($('inline-name-row'));
     list.innerHTML = '';
-    $('full-trip').setAttribute('aria-pressed', !selected);
     for (const day of [...new Set(stops.map((s) => s.date.slice(0, 10)))].sort()) {
       const group = stops.filter((s) => s.date.startsWith(day));
       const birding = group
@@ -966,6 +1053,19 @@ export function mountWorkspace(root, model, options) {
       for (const s of group) {
         const row = document.createElement('div'),
           r = routes.get(s.id);
+        const previous = stops[stops.indexOf(s) - 1];
+        const road = r?.geometry.coordinates;
+        const gap =
+          road && previous
+            ? 1000 * Math.max(distance(previous.coords, road[0]), distance(s.coords, road.at(-1)))
+            : 0;
+        const failure = routeErrors.get(s.id);
+        const routeError =
+          previous && failure?.coordinates === [previous.coords, s.coords].join(';')
+            ? failure
+            : null;
+        if (failure && !routeError) routeErrors.delete(s.id);
+        const pending = pendingRoutes.has(s.id);
         row.dataset.stop = s.id;
         row.className = 'stop-row' + (s.id === selected || checked.has(s.id) ? ' active' : '');
         row.innerHTML =
@@ -984,20 +1084,40 @@ export function mountWorkspace(root, model, options) {
           '</span><span class="stop-text"><strong>' +
           escape(s.name) +
           '</strong></span></button>' +
-          (stops.indexOf(s) > 0
-            ? '<button class="leg edit-only ' +
-              (r ? 'computed' : '') +
-              '" title="' +
-              (r
-                ? Math.round(r.distance / 1000) + ' km · click to recompute'
-                : 'Compute drive from previous stop') +
-              '" aria-label="' +
-              (r ? 'Recompute' : 'Compute') +
-              ' drive to ' +
-              escape(s.name) +
-              '">' +
-              (r ? '↳ ' + driveLabel(r.duration) : '↳ Drive') +
-              '</button>'
+          (previous
+            ? routeError?.noRoad
+              ? '<span class="leg route-error edit-only" tabindex="0" aria-disabled="true" title="' +
+                escape(routeError.message) +
+                '"><i class="bi bi-x-lg" aria-hidden="true"></i> No road</span>'
+              : '<button ' +
+                (pending ? 'disabled aria-busy="true" ' : '') +
+                'class="leg edit-only ' +
+                (r ? 'computed' : '') +
+                '" title="' +
+                escape(
+                  routeError?.message ||
+                    (r
+                      ? Math.round(r.distance / 1000) +
+                        ' km' +
+                        (gap > 150
+                          ? ' · Route ends up to ' + Math.ceil(gap) + ' m from a stop pin'
+                          : '') +
+                        ' · Click to recompute'
+                      : 'Compute drive from previous stop'),
+                ) +
+                '" aria-label="' +
+                (pending ? 'Calculating' : r ? 'Recompute' : 'Compute') +
+                ' drive to ' +
+                escape(s.name) +
+                '">' +
+                (pending
+                  ? '<span class="spinner-border spinner-border-sm route-spinner" aria-hidden="true"></span>'
+                  : routeError
+                    ? 'Drive unavailable'
+                    : r
+                      ? '↳ ' + driveLabel(r.duration) + (gap > 150 ? ' ⚠' : '')
+                      : '↳ Drive') +
+                '</button>'
             : '');
         const button = row.querySelector('.stop-button');
         let timer,
@@ -1017,7 +1137,7 @@ export function mountWorkspace(root, model, options) {
           button.onpointercancel =
           button.onpointermove =
             () => clearTimeout(timer);
-        row.querySelector('.leg')?.addEventListener('click', () => computeRoute(s));
+        row.querySelector('button.leg')?.addEventListener('click', () => computeRoute(s));
         if (s.id === selected && writable() && !checked.size) {
           row.classList.add('inline-edit-row');
           button.querySelector('.stop-symbol').remove();
@@ -1027,6 +1147,31 @@ export function mountWorkspace(root, model, options) {
         }
         section.append(row);
         if (s.id === selected && writable() && !checked.size) section.append($('editor'));
+        if (
+          s.id === selected &&
+          preview &&
+          (s.note || (s.type === 'Birding' && s.targets.length))
+        ) {
+          const details = document.createElement('details');
+          details.className = 'preview-stop-details';
+          details.open = true;
+          details.innerHTML =
+            '<summary>Details</summary>' +
+            (s.type === 'Birding' && s.targets.length
+              ? '<ul class="preview-stop-targets" aria-label="Starred species">' +
+                s.targets
+                  .map(
+                    (name) =>
+                      '<li><i class="bi bi-star-fill target-star" aria-hidden="true"></i> ' +
+                      escape(name) +
+                      '</li>',
+                  )
+                  .join('') +
+                '</ul>'
+              : '') +
+            (s.note ? '<p>' + escape(s.note) + '</p>' : '');
+          section.append(details);
+        }
       }
     }
     if (!checked.size && !list.contains($('editor'))) $('editor').hidden = true;
@@ -1039,7 +1184,7 @@ export function mountWorkspace(root, model, options) {
     const s = active(),
       bulk = checked.size > 0;
     $('visitor-details').innerHTML =
-      !writable() && s
+      options.visitor && s
         ? '<strong>' +
           escape(s.name) +
           '</strong><p>' +
@@ -1143,12 +1288,11 @@ export function mountWorkspace(root, model, options) {
       );
   }
   // Match the original Species List model: rates per visit, effort-adjusted trip probability, and rank.
-  function planningSpecies() {
-    const key = selected + ':' + reportKey;
+  function planningSpecies(stop) {
+    const key = (stop?.id || 0) + ':' + reportKey;
     if (planningCache && planningKey === key) return planningCache;
     planningKey = key;
     const visits = stops.filter((s) => s.type === 'Birding' && s.historicalCount > 0),
-      stop = active(),
       seenCodes = new Set(
         stage() === 'after' && synced
           ? data.reportTaxa.map((t) => t.speciesCode)
@@ -1215,11 +1359,17 @@ export function mountWorkspace(root, model, options) {
   }
   function renderSpecies() {
     if (view !== 'species') return;
+    const stop = speciesScope === 'stop' ? active() : null;
+    $('species-scope-trip').setAttribute('aria-pressed', !stop);
+    $('species-scope-stop').setAttribute('aria-pressed', Boolean(stop));
+    $('species-scope-stop').disabled = !active();
     speciesBounds = speciesMapBounds(
-      (data.ebdLocations.length ? data.ebdLocations : stops).map((location) => location.coords),
+      stop
+        ? []
+        : (data.ebdLocations.length ? data.ebdLocations : stops).map((location) => location.coords),
+      stop,
     );
-    const stop = active(),
-      a = aggregation(stop),
+    const a = aggregation(stop),
       recorded = !writable(),
       planned = recorded && (!synced || stage() === 'before');
     $('species-panel').classList.toggle('planning', !recorded);
@@ -1281,10 +1431,10 @@ export function mountWorkspace(root, model, options) {
         : 'Individuals are summed across checklists, not unique birds.';
       return;
     }
-    const all = planningSpecies(),
+    const all = planningSpecies(stop),
       maximum = Number($('max-trip').value),
       minimum = Number($('min-rate').value);
-    $('min-rate-name').textContent = stop ? 'This stop (min)' : 'Avg. stop (min)';
+    $('min-rate').closest('label').hidden = !stop;
     $('max-trip-label').textContent = Math.round(maximum * 100) + '%';
     $('min-rate-label').textContent = Math.round(minimum * 100) + '%';
     // Only offer the filters that can match something here; hidden ones are cleared.
@@ -1302,7 +1452,7 @@ export function mountWorkspace(root, model, options) {
     const filtered = all.filter(
       (t) =>
         (!stop || t.location > 0) &&
-        (stop ? t.location : t.avg) >= minimum &&
+        (stop ? t.location >= minimum : t.avg > 0) &&
         t.cumulative <= maximum &&
         (!filters.length ||
           filters.some((f) =>
@@ -1358,16 +1508,6 @@ export function mountWorkspace(root, model, options) {
         title: 'Chance of recording the species at least once over all planned visits',
         num: true,
       },
-      ...(!stop
-        ? [
-            {
-              key: 'overall',
-              label: 'Dataset',
-              title: 'Reporting rate across every checklist in the loaded eBird data',
-              num: true,
-            },
-          ]
-        : []),
     ];
     $('species-columns').innerHTML =
       '<tr>' +
@@ -1440,7 +1580,6 @@ export function mountWorkspace(root, model, options) {
             '</td><td class="num">' +
             percent(t.cumulative) +
             '</td>' +
-            (!stop ? '<td class="num">' + percent(t.overall) + '</td>' : '') +
             '</tr>',
         )
         .join('') || '<tr><td colspan="7">No species match these filters.</td></tr>';
@@ -1610,7 +1749,8 @@ export function mountWorkspace(root, model, options) {
       el.classList.toggle('invited', options.invited);
       el.classList.toggle('preview', !writable());
     }
-    $('mode').textContent = preview ? 'Edit trip' : 'Preview';
+    $('mode-label').textContent = preview ? 'Edit trip' : 'Preview';
+    $('mode-icon').className = preview ? 'bi bi-pencil' : 'bi bi-eye';
     $('hotspots').checked = $('personal-locations').checked = writable();
     $('species-layer').checked = false;
     $('report-layer').checked = true;
@@ -1678,40 +1818,73 @@ export function mountWorkspace(root, model, options) {
     $('sheet').setAttribute('aria-label', open ? 'Collapse itinerary' : 'Open itinerary');
   }
   async function computeRoute(stop) {
-    if (!writable()) return;
-    rememberEdit();
-    const index = stops.indexOf(stop),
-      from = stops[index - 1],
-      coordinates = JSON.stringify([from.coords, stop.coords]);
+    const from = stops[stops.indexOf(stop) - 1];
+    if (!writable() || !from || pendingRoutes.has(stop.id)) return;
+    const coordinates = [from.coords, stop.coords].join(';');
+    const failure = routeErrors.get(stop.id);
+    if (failure?.noRoad && failure.coordinates === coordinates) return;
+    let noRoad = false;
+    const arrival = stop.date.slice(0, 16);
+    const timeZone = tripTimeZone(data.timeZone, stops[0]?.coords[1], stops[0]?.coords[0]);
+    const params = new URLSearchParams({
+      overview: 'full',
+      geometries: 'polyline6',
+      radiuses: '1000;1000',
+      access_token: mapboxgl.accessToken,
+    });
+    if (arrival) params.set('arrive_by', routeArrivalTime(arrival, timeZone));
+    const stillCurrent = () =>
+      !disposed &&
+      stops.includes(stop) &&
+      stops[stops.indexOf(stop) - 1] === from &&
+      coordinates === [from.coords, stop.coords].join(';') &&
+      arrival === stop.date.slice(0, 16) &&
+      timeZone === tripTimeZone(data.timeZone, stops[0]?.coords[1], stops[0]?.coords[0]);
+    pendingRoutes.add(stop.id);
+    routeErrors.delete(stop.id);
+    renderList();
     feedback('Computing road route…');
     try {
-      const r = await fetch(
-        'https://api.mapbox.com/directions/v5/mapbox/driving/' +
-          from.coords.join(',') +
-          ';' +
-          stop.coords.join(',') +
-          '?overview=full&geometries=polyline6&access_token=' +
-          mapboxgl.accessToken,
+      const response = await fetch(
+        'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordinates + '?' + params,
+        { signal: abort.signal },
       );
-      const data = await r.json();
-      if (!data.routes?.length) throw Error('Route unavailable');
-      if (
-        disposed ||
-        !stops.includes(stop) ||
-        stops[stops.indexOf(stop) - 1] !== from ||
-        coordinates !== JSON.stringify([from.coords, stop.coords])
-      )
-        return;
-      routes.set(stop.id, {
-        ...data.routes[0],
-        geometry: compactRouteGeometry(polyline.toGeoJSON(data.routes[0].geometry, 6)),
-      });
+      if (!stillCurrent()) return;
+      if (response.status === 429)
+        throw new Error('Routing is busy. Wait a moment before trying again.');
+      if (!response.ok)
+        throw new Error('The routing service could not calculate this drive. Try again shortly.');
+      const result = await response.json();
+      if (!stillCurrent()) return;
+      noRoad = result.code === 'NoSegment' || result.code === 'NoRoute';
+      if (result.code === 'NoSegment')
+        throw new Error(
+          'No drivable road within 1 km of a stop. Move either pin to a road or parking area before trying again.',
+        );
+      if (result.code === 'NoRoute')
+        throw new Error(
+          'No drivable route connects these pins. Move either pin before trying again.',
+        );
+      const route = result.routes?.[0];
+      if (!route) throw new Error('No driving route found. Check the stop pins and road access.');
+      const geometry = compactRouteGeometry(polyline.toGeoJSON(route.geometry, 6));
+      rememberEdit();
+      routes.set(stop.id, { geometry, duration: route.duration, distance: route.distance });
       drawLayers();
-      renderList();
       queueSave();
       feedback('');
     } catch (error) {
-      feedback(error.message);
+      if (stillCurrent()) {
+        const message =
+          error instanceof TypeError
+            ? 'Could not reach the routing service. Check your connection and try again.'
+            : error.message;
+        routeErrors.set(stop.id, { coordinates, noRoad, message });
+        feedback(message);
+      }
+    } finally {
+      pendingRoutes.delete(stop.id);
+      if (!disposed) renderList();
     }
   }
   function removeStops(ids) {
@@ -1756,6 +1929,7 @@ export function mountWorkspace(root, model, options) {
     if (!commentsByLocation.has(c.locality_id)) commentsByLocation.set(c.locality_id, []);
     commentsByLocation.get(c.locality_id).push(c);
   }
+  const distanceRequests = new Set();
   function renderSelectionStats() {
     reportChecklists();
     const key = JSON.stringify([selected, [...checked], writable(), reportKey]);
@@ -1765,6 +1939,27 @@ export function mountWorkspace(root, model, options) {
       species = new Set(locations.flatMap((l) => Object.keys(l.counts))),
       minutes = median(locations.flatMap((l) => l.durations)),
       km = median(locations.flatMap((l) => l.distances));
+    const missingDistances = locations.filter(
+      (location) => location.distanceMissing && !distanceRequests.has(location.id),
+    );
+    if (missingDistances.length && options.loadDistances) {
+      for (const location of missingDistances) distanceRequests.add(location.id);
+      options
+        .loadDistances(missingDistances.map((location) => location.id))
+        .then((distances) => {
+          if (disposed) return;
+          for (const location of missingDistances) {
+            location.distances = distances[location.id];
+            location.distanceMissing = false;
+          }
+          selectionStatsKey = '';
+          renderSelectionStats();
+        })
+        .catch((error) => {
+          for (const location of missingDistances) distanceRequests.delete(location.id);
+          feedback('Could not read recorded distances: ' + error.message);
+        });
+    }
     commentEntries = locations.flatMap((l) => commentsByLocation.get(l.id) || []);
     commentLocations = new Map(
       locations.map((l) => [
@@ -1784,7 +1979,7 @@ export function mountWorkspace(root, model, options) {
     $('historical-stats').innerHTML = writable()
       ? '<div class="stats-label">Historical EBD selection</div><div class="stats-grid"><span><b>' +
         (minutes === null ? '—' : Math.round(minutes) + ' min') +
-        '</b> median duration</span><span><b>' +
+        '</b> median duration</span><span title="Median of recorded travel distances; excludes zero and missing distances"><b>' +
         (km === null ? '—' : km.toFixed(1) + ' km') +
         '</b> median distance</span></div><div class="stats-grid stats-secondary"><span>' +
         species.size +
@@ -1807,7 +2002,7 @@ export function mountWorkspace(root, model, options) {
               : '')) +
         '</span></div>'
       : '';
-    $('selection-stats').hidden = !writable() && !lists.length;
+    $('selection-stats').hidden = preview || (!writable() && !lists.length);
     $('comment-feedback').textContent = '';
     $('copy-comments').disabled = $('download-comments').disabled = !commentEntries.length;
   }
@@ -1821,16 +2016,45 @@ export function mountWorkspace(root, model, options) {
       speciesNameByCode: new Map(data.taxa.map((t) => [t.code, t.name])),
     });
   }
+  const commentFeedbackTimers = new WeakMap();
+  function showCommentFeedback(button, status, originalIcon, message, success = true) {
+    clearTimeout(commentFeedbackTimers.get(button));
+    const icon = button.querySelector('i');
+    icon.className = success ? 'bi bi-check-lg' : 'bi bi-x-lg';
+    status.textContent = message;
+    commentFeedbackTimers.set(
+      button,
+      setTimeout(() => {
+        icon.className = 'bi ' + originalIcon;
+      }, 1800),
+    );
+  }
   $('copy-comments').onclick = async () => {
-    $('comment-feedback').textContent = (await copyMarkdown(commentsMarkdown()))
-      ? 'Copied'
-      : 'Copy unavailable';
+    const copied = await copyMarkdown(commentsMarkdown());
+    showCommentFeedback(
+      $('copy-comments'),
+      $('comment-feedback'),
+      'bi-copy',
+      copied ? 'Copied to clipboard' : 'Could not copy',
+      copied,
+    );
   };
   $('download-comments').onclick = () => {
     downloadMarkdown('trip-observer-comments.md', commentsMarkdown());
-    $('comment-feedback').textContent = 'Downloaded';
+    showCommentFeedback(
+      $('download-comments'),
+      $('comment-feedback'),
+      'bi-download',
+      'Download started',
+    );
   };
-  $('full-trip').onclick = () => choose(0);
+  for (const scope of ['trip', 'stop'])
+    $('species-scope-' + scope).onclick = () => {
+      speciesScope = scope;
+      speciesSort = scope === 'trip' ? 'avg' : 'rank';
+      speciesDirection = scope === 'trip' ? -1 : 1;
+      renderSpecies();
+    };
   // Resize either the itinerary/details split or the sidebar/map split.
   for (const [id, horizontal] of [
     ['detail-split', true],
@@ -1977,13 +2201,9 @@ export function mountWorkspace(root, model, options) {
   $('duration').oninput = (e) => change('duration', Number(e.target.value));
   $('note').oninput = (e) => change('note', e.target.value);
   $('auto-name').onclick = () => {
-    if (!data.ebdLocations.length) return;
-    change(
-      'name',
-      data.ebdLocations.reduce((a, b) =>
-        distance(active().coords, a.coords) < distance(active().coords, b.coords) ? a : b,
-      ).name,
-    );
+    const location = workspaceNamingLocation(data.ebdLocations, active().coords, active().radius);
+    if (!location) return;
+    change('name', location.name);
     $('name').value = active().name;
     fitName();
   };
@@ -2083,14 +2303,23 @@ export function mountWorkspace(root, model, options) {
   updateBasemapCards();
   for (const id of ['map', 'satellite'])
     $('basemap-' + id).onclick = () => {
-      if (basemap === (id === 'map' ? 'outdoor' : 'satellite')) return;
-      basemap = id === 'map' ? 'outdoor' : 'satellite';
-      $('basemap-map').setAttribute('aria-pressed', id === 'map');
-      $('basemap-satellite').setAttribute('aria-pressed', id === 'satellite');
-      map.setStyle(
-        'mapbox://styles/mapbox/' + (id === 'map' ? preferences.mapStyle : 'satellite-streets-v12'),
-      );
+      const next = id === 'map' ? 'outdoor' : id;
+      if (basemap === next) return;
+      basemap = next;
+      for (const option of ['map', 'satellite'])
+        $('basemap-' + option).setAttribute('aria-pressed', option === id);
+      reloadBasemap();
     };
+  function reloadBasemap() {
+    const style = basemap === 'satellite' ? 'satellite-streets-v12' : preferences.mapStyle;
+    map.setStyle('mapbox://styles/mapbox/' + style, { diff: false });
+  }
+  $('highlight-access').checked = Boolean(preferences.highlightAccess);
+  $('highlight-access').onchange = (event) => {
+    preferences.highlightAccess = event.target.checked;
+    savePreferences();
+    reloadBasemap();
+  };
   $('settings-open').onclick = () => {
     renderLists();
     renderReportSummary();
@@ -2102,7 +2331,7 @@ export function mountWorkspace(root, model, options) {
     preferences.mapStyle = e.target.value;
     savePreferences();
     updateBasemapCards();
-    if (basemap === 'outdoor') map.setStyle('mapbox://styles/mapbox/' + preferences.mapStyle);
+    if (basemap === 'outdoor') reloadBasemap();
   };
   function applyStopDisplay() {
     const inline = writable() && active() && !checked.size;
@@ -2123,6 +2352,7 @@ export function mountWorkspace(root, model, options) {
       if (id === 'interest-details' && mode === 'default') field.open = true;
     }
     $('selection-stats').hidden =
+      preview ||
       inline ||
       (active() && active().type !== 'Birding') ||
       (!writable() && !aggregation(active()).lists.length);

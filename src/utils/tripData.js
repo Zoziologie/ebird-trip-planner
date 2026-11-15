@@ -106,3 +106,17 @@ export const readLocationChecklists = async (tripId, localityId) => {
     time: checklist.time,
   }));
 };
+
+// Older trips may have checklist distances but no cached location summaries.
+export const readLocationDistances = async (tripId, localityIds) => {
+  const records = await db.checklists.bulkGet(localityIds.map((id) => [tripId, String(id)]));
+  return Object.fromEntries(
+    localityIds.map((id, i) => [
+      id,
+      (records[i]?.checklist || [])
+        .filter((checklist) => checklist.all_species_reported !== false)
+        .map((checklist) => Number(checklist.effort_distance_km))
+        .filter((km) => Number.isFinite(km) && km > 0),
+    ]),
+  );
+};

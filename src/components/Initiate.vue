@@ -642,17 +642,16 @@ export default {
               );
             }
           }
-          if (isComplete) {
-            location.checklist.push({
-              checklist_id: checklist.checklist_id,
-              date: checklist.date,
-              time: checklist.time,
-              duration_minutes: checklist.duration_minutes,
-              effort_distance_km: checklist.effort_distance_km,
-              all_species_reported: true,
-              species: checklist.species,
-            });
-          }
+          // Keep links for incomplete lists while their species stay out of reporting rates.
+          location.checklist.push({
+            checklist_id: checklist.checklist_id,
+            date: checklist.date,
+            time: checklist.time,
+            duration_minutes: checklist.duration_minutes,
+            effort_distance_km: checklist.effort_distance_km,
+            all_species_reported: isComplete,
+            species: checklist.species,
+          });
         }
         updateProcessingProgress(end, sourceChecklists.length, 'checklists');
         await yieldToBrowser();
@@ -751,6 +750,7 @@ export default {
         const durations = [];
         const distances = [];
         for (const entry of entries) {
+          if (!entry.all_species_reported) continue;
           const minutes = Number(entry?.duration_minutes);
           if (Number.isFinite(minutes) && minutes > 0) durations.push(minutes);
           const kilometers = Number(entry?.effort_distance_km);

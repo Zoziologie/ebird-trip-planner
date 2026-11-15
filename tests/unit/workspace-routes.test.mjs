@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { retainWorkspaceRoutes } from '../../src/utils/workspaceRoutes.js';
+import { retainWorkspaceRoutes, routeArrivalTime } from '../../src/utils/workspaceRoutes.js';
 import { workspaceModel, workspaceModelPlan } from '../../src/utils/workspaceModel.js';
 import { buildWorkspacePlan, workspaceVisits } from '../../src/utils/workspacePlan.js';
 
@@ -119,4 +119,10 @@ test('unaffected routes survive deleting a stop, saving locally and reopening th
     distance: 0,
     duration: 0,
   });
+});
+
+test('routing uses the trip clock for scheduled arrivals regardless of browser timezone', () => {
+  assert.equal(routeArrivalTime('2026-11-21T07:00', 'America/Cancun'), '2026-11-21T12:00:00Z');
+  assert.equal(routeArrivalTime('2026-02-16T10:00', 'Asia/Muscat'), '2026-02-16T06:00:00Z');
+  assert.equal(routeArrivalTime('2026-07-21T07:00', 'Europe/Paris'), '2026-07-21T05:00:00Z');
 });

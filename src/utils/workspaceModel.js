@@ -103,21 +103,31 @@ export const workspaceModel = (
     reportTaxa: report?.taxa || [],
     reportChecklists: report?.checklists || [],
     comments,
-    ebdLocations: (ebd?.locations || []).map((l) => ({
-      id: String(l.locality_id),
-      name: l.locality,
-      coords: [l.longitude, l.latitude],
-      hotspot: Boolean(l.locality_hotspot),
-      count: l.checklist_count_complete ?? l.checklist_count,
-      totalCount: l.checklist_count,
-      counts: Object.fromEntries(l.species_checklist_counts || []),
-      durations:
-        l.checklist_durations ||
-        (l.checklist || []).map((c) => c.duration_minutes).filter((n) => n > 0),
-      distances:
-        l.checklist_distances_km ||
-        (l.checklist || []).map((c) => c.effort_distance_km).filter((n) => n > 0),
-    })),
+    ebdLocations: (ebd?.locations || []).map((l) => {
+      const distances = (l.checklist_distances_km || [])
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0);
+      return {
+        id: String(l.locality_id),
+        name: l.locality,
+        coords: [l.longitude, l.latitude],
+        hotspot: Boolean(l.locality_hotspot),
+        count: l.checklist_count_complete ?? l.checklist_count,
+        totalCount: l.checklist_count,
+        incompleteCount: l.checklist_count_incomplete || 0,
+        counts: Object.fromEntries(l.species_checklist_counts || []),
+        durations:
+          l.checklist_durations ||
+          (l.checklist || []).map((c) => c.duration_minutes).filter((n) => n > 0),
+        distanceMissing: !distances.length && !l.checklist,
+        distances: distances.length
+          ? distances
+          : (l.checklist || [])
+              .filter((c) => c.all_species_reported !== false)
+              .map((c) => Number(c.effort_distance_km))
+              .filter((n) => Number.isFinite(n) && n > 0),
+      };
+    }),
   };
 };
 

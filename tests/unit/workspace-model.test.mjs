@@ -171,3 +171,25 @@ test('personal flags also apply to trip-report species outside the EBD dataset',
   assert.equal(model.taxa.find((t) => t.code === 'newbird').life, false);
   assert.equal(model.taxa.find((t) => t.code === 'newbird').region, true);
 });
+
+test('effort medians ignore stationary and unrecorded distances in cached and embedded data', () => {
+  const model = workspaceModel(plan, {
+    speciesList: [],
+    locations: [
+      { locality_id: 'L1', checklist_distances_km: [0, null, '', '2.5', 'X', -1, 4] },
+      {
+        locality_id: 'L2',
+        checklist_distances_km: [0, null],
+        checklist: [
+          { effort_distance_km: 0 },
+          { effort_distance_km: 1 },
+          { effort_distance_km: 20, all_species_reported: false },
+        ],
+      },
+      { locality_id: 'L3' },
+    ],
+  });
+  assert.deepEqual(model.ebdLocations[0].distances, [2.5, 4]);
+  assert.deepEqual(model.ebdLocations[1].distances, [1]);
+  assert.equal(model.ebdLocations[2].distanceMissing, true);
+});

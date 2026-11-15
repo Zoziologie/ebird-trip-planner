@@ -27,3 +27,19 @@ export const workspaceSpatialIndex = (locations) => {
     return found;
   };
 };
+
+// Name a stop for the best-recorded location in its area, falling back to the nearest outside it.
+export const workspaceNamingLocation = (locations, center, radius) => {
+  const ranked = locations.map((location) => ({
+    location,
+    count: location.count + location.incompleteCount,
+    distance: distance(center, location.coords),
+  }));
+  const nearby = ranked.filter((entry) => entry.distance <= radius);
+  return (nearby.length ? nearby : ranked).sort(
+    (a, b) =>
+      (nearby.length ? b.count - a.count : 0) ||
+      a.distance - b.distance ||
+      a.location.id.localeCompare(b.location.id),
+  )[0]?.location;
+};

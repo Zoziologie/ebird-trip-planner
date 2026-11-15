@@ -42,7 +42,7 @@ import { uniqueTripName, uniqueTripLabels, tripCloudId } from '../utils/tripName
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import AppAlert from '../components/AppAlert.vue';
 import zoziologieLogo from '../assets/zoziologie-logo.svg';
-import { tripDates } from '../utils/tripDates';
+import { tripDates, compareTripCards } from '../utils/tripDates';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
 const router = useRouter(),
@@ -53,7 +53,11 @@ watch(cloudLibrary, (items, previous, onCleanup) => {
   onCleanup(() => {
     active = false;
   });
-  cloudPlans.value = {};
+  cloudPlans.value = Object.fromEntries(
+    items
+      .filter((item) => item.revision && cloudPlans.value[item.id])
+      .map((item) => [item.id, cloudPlans.value[item.id]]),
+  );
   Promise.all(
     items
       .filter((item) => item.revision)
@@ -151,7 +155,7 @@ const groups = computed(() =>
     { id: 'undated', title: 'Dates unavailable' },
   ].map((group) => ({
     ...group,
-    trips: library.value.filter((trip) => trip.dates.group === group.id),
+    trips: library.value.filter((trip) => trip.dates.group === group.id).sort(compareTripCards),
   })),
 );
 const run = async (action) => {
