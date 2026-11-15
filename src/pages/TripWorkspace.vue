@@ -40,7 +40,7 @@ import {
   setCloudSharing,
   recordCloudActivity,
 } from '../utils/firebaseCloud';
-import { restoreTripArchive } from '../utils/tripData';
+import { restoreTripArchive, readLocationChecklists } from '../utils/tripData';
 import { decodeTripArchive } from '../utils/tripArchive';
 import TripWorkspaceView from '../components/TripWorkspaceView.vue';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
@@ -97,6 +97,7 @@ const savePlan = (plan) => {
     throw failure;
   });
 };
+const loadLocationChecklists = (id) => readLocationChecklists(selectedTripId.value, id);
 const saveReport = (report) => db.workspaceReports.put(report);
 const addDataset = async (payload, onProgress) => {
   const tripId = selectedTripId.value;
@@ -592,6 +593,7 @@ onBeforeUnmount(() => {
           :save="savePlan"
           :save-report="saveReport"
           :save-lists="saveLists"
+          :load-checklists="loadLocationChecklists"
         >
           <template #library
             ><router-link to="/trips" class="library-link" aria-label="My trips" title="My trips"

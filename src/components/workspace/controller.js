@@ -785,6 +785,7 @@ export function mountWorkspace(root, model, options) {
         ' checklists</div><span class="small">' +
         (p.hotspot ? 'Hotspot' : 'Personal location') +
         '</span>' +
+        (!pinned ? '<div class="small">Click for checklists</div>' : '') +
         (pinned && p.hotspot
           ? '<a target="_blank" rel="noopener" href="https://ebird.org/hotspot/' +
             escape(p.id) +
@@ -823,6 +824,35 @@ export function mountWorkspace(root, model, options) {
       .setLngLat(feature.geometry.coordinates)
       .setDOMContent(box)
       .addTo(map);
+    if (id === 'ebd' && pinned && options.loadChecklists) {
+      const lists = document.createElement('div');
+      lists.className = 'location-checklists';
+      lists.textContent = 'Loading checklists…';
+      box.append(lists);
+      options
+        .loadChecklists(p.id)
+        .then((checklists) => {
+          lists.innerHTML =
+            checklists
+              .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
+              .map(
+                (checklist) =>
+                  '<a target="_blank" rel="noopener noreferrer" href="https://ebird.org/checklist/' +
+                  encodeURIComponent(checklist.id) +
+                  '">' +
+                  escape(checklist.date) +
+                  ' ' +
+                  escape(checklist.time || '') +
+                  ' · ' +
+                  escape(checklist.id) +
+                  ' ↗</a>',
+              )
+              .join('') || 'No checklist details in this dataset.';
+        })
+        .catch(() => {
+          lists.textContent = 'Could not load checklists. Close and reopen to retry.';
+        });
+    }
     popup.on('close', () => {
       popupPinned = false;
       hoverKey = '';
@@ -1911,10 +1941,6 @@ export function mountWorkspace(root, model, options) {
   $('name').oninput = (e) => {
     change('name', e.target.value);
     fitName();
-  };
-  $('rename-stop').onclick = () => {
-    $('name').focus();
-    $('name').select();
   };
   // Keep the name focused while clicking auto-name, which only shows during name editing.
   $('auto-name').onmousedown = (e) => e.preventDefault();

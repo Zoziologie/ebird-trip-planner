@@ -1219,6 +1219,72 @@ try {
     async () => (await state(editor)).visits[0].note === 'Kept after revocation',
     'revoked device copy remains editable',
   );
+  // Personal-location popups link directly to their imported checklists.
+  const popupContext = await context();
+  const popupPage = popupContext.pages()[0];
+  await popupContext.route('https://api.mapbox.com/**', (route) =>
+    route.fulfill({
+      json: route.request().url().includes('/styles/')
+        ? {
+            version: 8,
+            sources: {},
+            layers: [
+              { id: 'background', type: 'background', paint: { 'background-color': '#e5ece6' } },
+            ],
+          }
+        : {},
+    }),
+  );
+  await popupPage.goto(`${base}/trips`);
+  await popupPage.evaluate(async () => {
+    await window.workspaceHarnessReady;
+    const { db } = window.workspaceTest;
+    await db.trips.put({ id: 'popup', name: 'Personal location links', updatedAt: Date.now() });
+    await db.ebd.put({
+      tripId: 'popup',
+      speciesList: [],
+      locations: [
+        {
+          locality_id: 'Lpersonal',
+          locality: 'Personal marsh',
+          longitude: 0,
+          latitude: 20,
+          locality_hotspot: false,
+          checklist_count: 2,
+          species_checklist_counts: [],
+        },
+      ],
+    });
+    await db.checklists.put({
+      tripId: 'popup',
+      localityId: 'Lpersonal',
+      checklist: [
+        { checklist_id: 'S123', date: '2026-11-15', time: '06:30' },
+        { checklist_id: 'S124', date: '2026-11-14', time: '07:00' },
+      ],
+    });
+    localStorage.setItem('selectedTripId', 'popup');
+  });
+  await popupPage.goto(`${base}/workspace`);
+  await popupPage.locator('#layers > summary').click();
+  await popupPage.locator('#personal-locations').check();
+  await popupPage.locator('#layers > summary').click();
+  const canvas = await popupPage.locator('#map canvas').boundingBox();
+  await until(async () => {
+    if (await popupPage.locator('.pinned-popup a[href="https://ebird.org/checklist/S123"]').count())
+      return true;
+    await popupPage.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    return false;
+  }, 'personal location checklist links');
+  assert.equal(await popupPage.locator('.pinned-popup .location-checklists a').count(), 2);
+  assert.equal(
+    await popupPage.locator('.pinned-popup a').last().getAttribute('href'),
+    'https://ebird.org/checklist/S124',
+  );
+  assert.equal(
+    await popupPage.getByRole('button', { name: 'Rename stop', exact: true }).count(),
+    0,
+  );
   assert.deepEqual(errors, []);
   passed = true;
   console.log(

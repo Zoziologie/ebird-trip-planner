@@ -1578,10 +1578,6 @@
   display: inline-grid;
   place-items: center;
 }
-.trip-workspace-ui .name-field #rename-stop {
-  display: inline-grid;
-  place-items: center;
-}
 .trip-workspace-ui .name-field button:hover {
   background: var(--tint);
 }
@@ -1594,4 +1590,14 @@
 .trip-workspace-ui .stop-datetime input {
   min-width: 0;
   width: 100%;
+}
+
+.trip-workspace-ui .location-checklists {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+.trip-workspace-ui .location-checklists a {
+  display: block;
+  padding-block: 3px;
 }

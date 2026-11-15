@@ -1,4 +1,4 @@
-import { db } from '../data/db';
+import { db } from '../data/db.js';
 
 // Read a consistent snapshot before exporting or uploading.
 export const readTripArchive = (tripId) =>
@@ -89,4 +89,20 @@ export const restoreTripArchive = async (
   );
   onProgress(1);
   return tripId;
+};
+
+// Read one location on demand; older archives keep checklists inside the dataset.
+export const readLocationChecklists = async (tripId, localityId) => {
+  const stored = await db.checklists.get([tripId, String(localityId)]);
+  const checklists =
+    stored?.checklist ||
+    (await db.ebd.get(tripId))?.locations.find(
+      (location) => String(location.locality_id) === String(localityId),
+    )?.checklist ||
+    [];
+  return checklists.map((checklist) => ({
+    id: checklist.checklist_id,
+    date: checklist.date,
+    time: checklist.time,
+  }));
 };

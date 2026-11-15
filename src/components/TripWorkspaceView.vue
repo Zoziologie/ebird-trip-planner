@@ -13,6 +13,7 @@ const props = defineProps({
   save: Function,
   saveReport: Function,
   saveLists: Function,
+  loadChecklists: Function,
 });
 const root = ref(null);
 const mapError = ref(false);
@@ -36,6 +37,7 @@ onMounted(() => {
       onSave: props.save,
       onReport: props.saveReport,
       onLists: props.saveLists,
+      loadChecklists: props.loadChecklists,
     });
   } catch (error) {
     if (!/failed to initialize webgl/i.test(error.message)) throw error;
@@ -159,9 +161,6 @@ defineExpose({
                 >
                 <div class="name-field">
                   <input id="name" aria-label="Stop name" title="Click to rename" />
-                  <button id="rename-stop" aria-label="Rename stop" title="Rename stop">
-                    <i class="bi bi-pencil" aria-hidden="true"></i>
-                  </button>
                   <button
                     id="auto-name"
                     aria-label="Auto name from location"
