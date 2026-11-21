@@ -26,6 +26,7 @@ import {
   readWorkspacePlan,
   applyWorkspacePlan,
   recoveryRetentionMs,
+  recoveryLimit,
 } from '../utils/workspaceLocal';
 import { enableTripCloud } from '../utils/tripCloudSetup';
 import { getWorkspaceCloud, workspaceUrl } from '../utils/workspaceCloud';
@@ -289,7 +290,12 @@ const load = async () => {
         }
       }
       await refreshTrips();
-      if (selectedTripId.value) await attachLocal(selectedTripId.value);
+      // Nothing to show on this device (e.g. a bookmarked /workspace): go to the trip list.
+      if (!selectedTripId.value) {
+        if (request === loadId) await router.replace('/trips');
+        return;
+      }
+      await attachLocal(selectedTripId.value);
     }
     if (request === loadId) ready.value = true;
   } catch (failure) {
@@ -402,6 +408,13 @@ const deleteRecovery = () =>
   run(async () => {
     await db.workspaceRecovery.delete(recovery.value.id);
     recovery.value = null;
+  });
+const confirmDeleteRecoveries = ref(false);
+const deleteAllRecoveries = () =>
+  run(async () => {
+    await db.workspaceRecovery.where('tripId').equals(selectedTripId.value).delete();
+    recovery.value = null;
+    confirmDeleteRecoveries.value = false;
   });
 const exportRecovery = (entry) =>
   download(
@@ -531,9 +544,13 @@ onBeforeUnmount(() => {
           @close="recoveryNoticeHidden = true"
         >
           <div class="recovery-notice-content">
-            <span>
-              {{ recoveries.length }} local recovery
-              {{ recoveries.length === 1 ? 'copy' : 'copies' }} · kept 14 days.
+            <span
+              :title="`When an edit here conflicts with the cloud, the cloud version wins and this
+                device's version is kept aside. Up to ${recoveryLimit} copies, each for 14 days.`"
+            >
+              {{ recoveries.length }}
+              {{ recoveries.length === 1 ? 'copy' : 'copies' }} of device edits that conflicted with
+              the cloud · kept 14 days.
             </span>
             <select
               class="form-select form-select-sm w-auto"
@@ -548,6 +565,22 @@ onBeforeUnmount(() => {
                 #{{ entry.id }} · {{ new Date(entry.createdAt).toLocaleString() }}
               </option>
             </select>
+            <button
+              v-if="!confirmDeleteRecoveries"
+              class="btn btn-outline-danger btn-sm"
+              :disabled="busy"
+              @click="confirmDeleteRecoveries = true"
+            >
+              <i class="bi bi-trash" aria-hidden="true"></i> Delete all
+            </button>
+            <template v-else
+              ><button class="btn btn-danger btn-sm" :disabled="busy" @click="deleteAllRecoveries">
+                Delete {{ recoveries.length }} {{ recoveries.length === 1 ? 'copy' : 'copies' }}
+              </button>
+              <button class="btn btn-link btn-sm" @click="confirmDeleteRecoveries = false">
+                Cancel
+              </button></template
+            >
           </div>
         </AppAlert>
         <TripWorkspaceView

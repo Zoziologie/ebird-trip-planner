@@ -620,7 +620,8 @@ try {
     await refreshTrips();
     selectedTripId.value = 'workspace-test';
   });
-  await page.reload();
+  // The empty device was sent from /workspace to the trip list; open the seeded trip.
+  await page.goto(`${base}/workspace`);
   const noWebgl = await ownerContext.newPage();
   await noWebgl.addInitScript(() => {
     const getContext = HTMLCanvasElement.prototype.getContext;
@@ -1275,6 +1276,26 @@ try {
   await page.getByRole('button', { name: 'Delete copy', exact: true }).click();
   await until(async () => (await state(page)).recoveries.length === 0, 'manual recovery deletion');
   assert.equal((await state(page)).visits[0].note, 'Commit whose acknowledgement was lost');
+  // At most five copies are kept (trimmed when the trip opens) and all can be deleted at once.
+  await page.evaluate(async () => {
+    const { db } = window.workspaceTest;
+    const tripId = localStorage.getItem('selectedTripId');
+    const { basePlan: plan } = await db.workspaceSync.get(tripId);
+    await db.workspaceRecovery.bulkAdd(
+      Array.from({ length: 7 }, (_, i) => ({
+        tripId,
+        createdAt: Date.now() - (i + 1) * 60000,
+        name: 'Older copy',
+        plan,
+      })),
+    );
+  });
+  await page.reload();
+  await page.getByLabel('Local recovery copies', { exact: true }).waitFor();
+  assert.equal((await state(page)).recoveries.length, 5);
+  await page.getByRole('button', { name: 'Delete all', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete 5 copies', exact: true }).click();
+  await until(async () => (await state(page)).recoveries.length === 0, 'recovery copies deleted');
 
   await visitor.setViewportSize({ width: 390, height: 844 });
   await visitor.reload();

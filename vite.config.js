@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
-import { readFileSync } from 'node:fs';
+import { readFileSync, copyFileSync } from 'node:fs';
 
 const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -21,6 +21,16 @@ export default defineConfig({
   },
   plugins: [
     vue(),
+    // GitHub Pages only serves real files: it answers /workspace, shared ?cloud= links and
+    // other app routes with 404.html. Make that the app, so the router handles the address
+    // on a first visit too (afterwards the service worker serves the app for any route).
+    {
+      name: 'spa-404',
+      apply: 'build',
+      closeBundle() {
+        copyFileSync('dist/index.html', 'dist/404.html');
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {

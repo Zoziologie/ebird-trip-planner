@@ -22,5 +22,6 @@ const routes = [
     redirect: (to) => ({ path: '/workspace', query: { ...to.query, view: 'species' } }),
   },
   { path: '/speciesMap', redirect: editor },
+  { path: '/:unknown(.*)*', redirect: '/' },
 ];
 export default createRouter({ history: createWebHistory(import.meta.env.BASE_URL), routes });

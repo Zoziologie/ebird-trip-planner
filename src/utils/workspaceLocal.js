@@ -10,13 +10,20 @@ export const readWorkspacePlan = (tripId) =>
   );
 
 export const recoveryRetentionMs = 14 * 24 * 60 * 60 * 1000;
+// Newest copies kept per trip; older ones go even before they expire.
+export const recoveryLimit = 5;
 
-const pruneWorkspaceRecovery = (tripId, now = Date.now()) =>
-  db.workspaceRecovery
-    .where('tripId')
-    .equals(tripId)
-    .filter((entry) => entry.createdAt <= now - recoveryRetentionMs)
-    .delete();
+const pruneWorkspaceRecovery = async (tripId, now = Date.now()) => {
+  const entries = await db.workspaceRecovery.where('tripId').equals(tripId).sortBy('createdAt');
+  await db.workspaceRecovery.bulkDelete(
+    entries
+      .filter(
+        (entry, index) =>
+          entry.createdAt <= now - recoveryRetentionMs || index < entries.length - recoveryLimit,
+      )
+      .map((entry) => entry.id),
+  );
+};
 
 export const prepareWorkspace = (tripId) =>
   db.transaction('rw', db.trips, db.visits, db.workspaceSync, db.workspaceRecovery, async () => {
@@ -61,17 +68,21 @@ export const acceptCloudPlan = (tripId, cloud) =>
     const state = await db.workspaceSync.get(tripId);
     const local = await readWorkspacePlan(tripId);
     const { plan, conflicts } = mergePlans(state.basePlan, local, cloud.plan);
-    await pruneWorkspaceRecovery(tripId);
     let recoveryId = null;
     if (conflicts && !samePlan(local, state.basePlan)) {
-      recoveryId = await db.workspaceRecovery.add({
-        tripId,
-        createdAt: Date.now(),
-        baseRevision: state.revision,
-        name: `${local.name} — recovered device edits`,
-        plan: local,
-      });
+      const latest = await db.workspaceRecovery.where('tripId').equals(tripId).last();
+      // The same device edits losing again (e.g. two devices editing one stop) add nothing.
+      if (latest?.plan && samePlan(latest.plan, local)) recoveryId = latest.id;
+      else
+        recoveryId = await db.workspaceRecovery.add({
+          tripId,
+          createdAt: Date.now(),
+          baseRevision: state.revision,
+          name: `${local.name} — recovered device edits`,
+          plan: local,
+        });
     }
+    await pruneWorkspaceRecovery(tripId);
     const changed = !samePlan(plan, local);
     if (changed) await applyWorkspacePlan(tripId, plan);
     await db.workspaceSync.put({
