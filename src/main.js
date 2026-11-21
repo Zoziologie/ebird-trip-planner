@@ -9,6 +9,10 @@ import { registerSW } from 'virtual:pwa-register';
 
 registerSW({ immediate: true });
 
+// Trips (IndexedDB) and cached map tiles are the offline copy used in the field. Ask the
+// browser not to evict them when the device runs low on space; installed apps usually get it.
+navigator.storage?.persist?.().catch(() => {});
+
 // A tab left open across a deploy still runs the old bundle, whose lazily loaded pages no
 // longer exist on the server. Reload once to pick up the new build instead of showing a blank
 // page; the timestamp guard stops a reload loop if the file is missing for another reason.

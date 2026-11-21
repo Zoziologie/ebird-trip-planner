@@ -74,6 +74,24 @@ export default defineConfig({
               },
             },
           },
+          // Map tiles viewed while planning must still be there in the field, often weeks
+          // later and across several regions, so keep many of them for a long time.
+          // Expired entries are never served, even offline.
+          {
+            urlPattern: /^https:\/\/(?:api\.mapbox\.com|.*\.tiles\.mapbox\.com)\/v4\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'mapbox-map-tiles',
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+              expiration: {
+                maxEntries: 5000,
+                maxAgeSeconds: 60 * 60 * 24 * 90,
+                purgeOnQuotaError: true,
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/(?:api\.mapbox\.com|.*\.tiles\.mapbox\.com)\/.*/i,
             handler: 'StaleWhileRevalidate',
@@ -84,7 +102,7 @@ export default defineConfig({
               },
               expiration: {
                 maxEntries: 500,
-                maxAgeSeconds: 60 * 60 * 24 * 14,
+                maxAgeSeconds: 60 * 60 * 24 * 90,
               },
             },
           },
