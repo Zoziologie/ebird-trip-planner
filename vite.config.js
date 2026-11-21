@@ -97,19 +97,26 @@ export default defineConfig({
         description: 'Offline-friendly birding trip planning and species reports.',
         theme_color: '#2a9d8f',
         background_color: '#ffffff',
+        id: '/ebird-trip-planner/',
         display: 'standalone',
         scope: '/ebird-trip-planner/',
         start_url: '/ebird-trip-planner/',
         icons: [
           {
-            src: '/ebird-trip-planner/pwa-192.png',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/ebird-trip-planner/pwa-512.png',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
+          },
+          {
+            src: 'maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },
