@@ -17,6 +17,7 @@ import { tripTimeZone } from '../../utils/tripTimeZone';
 import polyline from '@mapbox/polyline';
 import { attachOfflineBasemap } from '../../utils/offlineBasemap';
 import { applyAccessBasemap } from '../../utils/accessBasemap.js';
+import { mountRangeSlider } from '../../utils/rangeSlider.js';
 import { compactRouteGeometry } from '../../utils/routeGeometry';
 import { retainWorkspaceRoutes, routeArrivalTime } from '../../utils/workspaceRoutes';
 import { normalizeWorkspaceReportId, loadWorkspaceReport } from '../../utils/workspaceReport';
@@ -1434,10 +1435,13 @@ export function mountWorkspace(root, model, options) {
       return;
     }
     const all = planningSpecies(stop),
-      maximum = Number($('max-trip').value),
+      tripLow = Number($('min-trip').value),
+      tripHigh = Number($('max-trip').value),
+      inTripRange = (t) => t.cumulative >= tripLow && t.cumulative <= tripHigh,
       minimum = Number($('min-rate').value);
     $('min-rate').closest('label').hidden = !stop;
-    $('max-trip-label').textContent = Math.round(maximum * 100) + '%';
+    $('trip-range-label').textContent =
+      Math.round(tripLow * 100) + '–' + Math.round(tripHigh * 100) + '%';
     $('min-rate-label').textContent = Math.round(minimum * 100) + '%';
     // Only offer the filters that can match something here; hidden ones are cleared.
     const usable = {
@@ -1455,7 +1459,7 @@ export function mountWorkspace(root, model, options) {
       (t) =>
         (!stop || t.location > 0) &&
         (stop ? t.location >= minimum : t.avg > 0) &&
-        t.cumulative <= maximum &&
+        inTripRange(t) &&
         (!filters.length ||
           filters.some((f) =>
             f === 'life'
@@ -1613,7 +1617,7 @@ export function mountWorkspace(root, model, options) {
       );
     const expected = (predicate) =>
         all
-          .filter(predicate)
+          .filter((t) => inTripRange(t) && predicate(t))
           .reduce((sum, t) => sum + (stop ? t.location : t.cumulative), 0)
           .toFixed(1),
       hasLife = [...taxa.values()].some((t) => t.life !== null),
@@ -1628,7 +1632,7 @@ export function mountWorkspace(root, model, options) {
     $('expected-summary').innerHTML =
       '<span class="expected-line" title="Expected number of species: sum of ' +
       (stop ? 'location rates' : 'trip probabilities') +
-      ' across all taxa, before table filters">' +
+      ' across taxa within the whole-trip range, before other table filters">' +
       '<strong>Expected species</strong>' +
       stat(
         '',
@@ -2102,15 +2106,9 @@ export function mountWorkspace(root, model, options) {
     };
   }
 
-  for (const id of [
-    'filter-life',
-    'filter-region',
-    'filter-trip',
-    'filter-interest',
-    'max-trip',
-    'min-rate',
-  ])
+  for (const id of ['filter-life', 'filter-region', 'filter-trip', 'filter-interest', 'min-rate'])
     $(id).oninput = renderSpecies;
+  mountRangeSlider($('trip-range'), () => renderSpecies());
   function renderLists() {
     for (const kind of ['life', 'region']) {
       const values = [...taxa.values()].filter((t) => t[kind] !== null);

@@ -383,18 +383,30 @@ defineExpose({
                   ><span id="species-evidence" class="small"></span>
                 </div>
                 <div class="probability-filters">
+                  <div class="trip-range" role="group" aria-labelledby="trip-range-name">
+                    <span id="trip-range-name">Whole trip</span>
+                    <div id="trip-range" class="range-slider">
+                      <input
+                        id="min-trip"
+                        aria-label="Minimum whole-trip chance"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step=".01"
+                        value="0"
+                      /><input
+                        id="max-trip"
+                        aria-label="Maximum whole-trip chance"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step=".01"
+                        value=".95"
+                      />
+                    </div>
+                    <output id="trip-range-label" for="min-trip max-trip">0–95%</output>
+                  </div>
                   <label
-                    >Whole trip (max)
-                    <input
-                      id="max-trip"
-                      aria-label="Maximum whole-trip chance"
-                      type="range"
-                      min="0"
-                      max="1"
-                      step=".01"
-                      value=".95"
-                    /><output id="max-trip-label">95%</output></label
-                  ><label
                     ><span id="min-rate-name">This stop (min)</span
                     ><input
                       id="min-rate"
