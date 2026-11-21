@@ -572,24 +572,28 @@ onBeforeUnmount(() => {
         <AppAlert
           v-if="recoveries.length && !recoveryNoticeHidden"
           tone="warning"
-          class="m-2"
+          class="recovery-notice m-2"
           @close="recoveryNoticeHidden = true"
         >
-          {{ recoveries.length }} local recovery {{ recoveries.length === 1 ? 'copy' : 'copies' }} ·
-          kept 14 days.
-          <select
-            class="form-select form-select-sm d-inline-block w-auto ms-2"
-            aria-label="Local recovery copies"
-            :value="recovery?.id || ''"
-            @change="
-              recovery = recoveries.find((entry) => entry.id === Number($event.target.value))
-            "
-          >
-            <option value="" disabled>Review a copy…</option>
-            <option v-for="entry in recoveries" :key="entry.id" :value="entry.id">
-              #{{ entry.id }} · {{ new Date(entry.createdAt).toLocaleString() }}
-            </option>
-          </select>
+          <div class="recovery-notice-content">
+            <span>
+              {{ recoveries.length }} local recovery
+              {{ recoveries.length === 1 ? 'copy' : 'copies' }} · kept 14 days.
+            </span>
+            <select
+              class="form-select form-select-sm w-auto"
+              aria-label="Local recovery copies"
+              :value="recovery?.id || ''"
+              @change="
+                recovery = recoveries.find((entry) => entry.id === Number($event.target.value))
+              "
+            >
+              <option value="" disabled>Review a copy…</option>
+              <option v-for="entry in recoveries" :key="entry.id" :value="entry.id">
+                #{{ entry.id }} · {{ new Date(entry.createdAt).toLocaleString() }}
+              </option>
+            </select>
+          </div>
         </AppAlert>
         <TripWorkspaceView
           ref="workspaceView"
@@ -987,6 +991,22 @@ onBeforeUnmount(() => {
   .share-input-row .share-button {
     min-height: 44px;
   }
+}
+.recovery-notice {
+  align-items: center;
+}
+.recovery-notice-content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.recovery-notice-content select {
+  min-width: 0;
+  max-width: 100%;
+}
+.recovery-notice :deep(.app-alert-close) {
+  margin: 0;
 }
 .recovery-stops {
   max-height: 45vh;
