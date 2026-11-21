@@ -20,6 +20,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "download-taxo": "node scripts/download_taxonomy.js",
+    "build-basemap": "node scripts/build_offline_basemap.js",
     "test": "node --test \"tests/unit/*.test.mjs\"",
     "perf:large-import": "node tests/perf/large-import.mjs",
     "perf:fixture": "node tests/perf/make-ebd-fixture.mjs",

@@ -15,6 +15,7 @@ import { workspaceSpatialIndex, workspaceNamingLocation } from '../../utils/work
 import { workspaceModelPlan } from '../../utils/workspaceModel';
 import { tripTimeZone } from '../../utils/tripTimeZone';
 import polyline from '@mapbox/polyline';
+import { attachOfflineBasemap } from '../../utils/offlineBasemap';
 import { applyAccessBasemap } from '../../utils/accessBasemap.js';
 import { compactRouteGeometry } from '../../utils/routeGeometry';
 import { retainWorkspaceRoutes, routeArrivalTime } from '../../utils/workspaceRoutes';
@@ -292,6 +293,7 @@ export function mountWorkspace(root, model, options) {
     },
     { signal: abort.signal },
   );
+  attachOfflineBasemap(map, { signal: abort.signal, restore: () => reloadBasemap() });
   const resizeObserver = new ResizeObserver(() => map.resize());
   resizeObserver.observe($('map'));
   map.on('style.load', async () => {

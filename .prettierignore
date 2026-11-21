@@ -6,3 +6,4 @@ src/assets/
 docs/prototypes/
 *.rules
 *.log
+public/offline-basemap.json
