@@ -21,14 +21,12 @@ import {
   cloudBindings,
   cloudError,
   cloudAllowance,
-  bindCloudTrip,
 } from '../state/cloudTrips';
 import {
   initCloud,
   signInCloud,
   signOutCloud,
   getCloudTrip,
-  getCloudAccess,
   downloadCloudTrip,
   deleteCloudTrip,
 } from '../utils/firebaseCloud';
@@ -43,6 +41,10 @@ import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import AppAlert from '../components/AppAlert.vue';
 import zoziologieLogo from '../assets/zoziologie-logo.svg';
 import { tripDates, compareTripCards } from '../utils/tripDates';
+import { workspaceStatuses, workspaceSyncStates } from '../state/workspaceSync';
+import { tripCardStatus, offlineReadiness, stopsWithMap } from '../utils/tripStatus';
+import { saveCloudTripOnDevice } from '../utils/tripDownload';
+import { cachedTiles } from '../utils/offlineBasemap';
 const Initiate = defineAsyncComponent(() => import('../components/Initiate.vue'));
 
 const router = useRouter(),
@@ -171,14 +173,58 @@ const run = async (action) => {
     busy.value = false;
   }
 };
-const connection = (item) =>
-  item.sync?.cloudId
-    ? online.value
-      ? 'Cloud autosave'
-      : 'Offline · saved on device'
-    : item.cloudId
-      ? 'Cloud trip'
-      : 'On this device';
+const statusChips = (item) =>
+  tripCardStatus(
+    item,
+    workspaceSyncStates.value[item.localId],
+    workspaceStatuses.value[item.localId],
+  );
+const canDownload = computed(() => online.value && cloudReady.value && Boolean(cloudUser.value));
+const download = (item) =>
+  run(async () => {
+    await saveCloudTripOnDevice(item.cloudId, { legacy: true });
+    status.value = `${item.name} is saved on this device and opens offline.`;
+  });
+// Inputs are gathered once; the checklist itself follows the library, so a download or
+// sync that finishes while the dialog is open shows up in it.
+const readiness = ref(null),
+  readinessDialog = ref(null);
+const readinessItem = computed(
+  () =>
+    readiness.value &&
+    library.value.find(
+      (item) =>
+        (readiness.value.localId && item.localId === readiness.value.localId) ||
+        (readiness.value.cloudId && item.cloudId === readiness.value.cloudId),
+    ),
+);
+const readinessChecks = computed(() =>
+  readinessItem.value
+    ? offlineReadiness(
+        readinessItem.value,
+        workspaceSyncStates.value[readinessItem.value.localId],
+        {
+          ...readiness.value,
+          mapStops: stopsWithMap(readinessItem.value.visits || [], readiness.value.tiles).length,
+        },
+      )
+    : [],
+);
+const checkOffline = (item) =>
+  run(async () => {
+    readiness.value = {
+      localId: item.localId,
+      cloudId: item.cloudId,
+      tiles: await cachedTiles().catch(() => new Set()),
+      persisted: Boolean(await navigator.storage?.persisted?.().catch(() => false)),
+      installed:
+        window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
+      ios:
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+    };
+    readinessDialog.value.showModal();
+  });
 const start = (kind) => {
   mode.value = kind;
   name.value = '';
@@ -201,23 +247,10 @@ const open = (item) => {
       if (item.localId) return await openLocal(item.localId);
       if (await getWorkspaceCloud(item.cloudId, { legacy: true }))
         return await router.push({ path: '/workspace', query: { cloud: item.cloudId } });
-      // Keep older archived trips usable without overwriting a local trip or cloud file.
+      // Older archived trips have no workspace plan: open them as a dataset copy.
       opening.value = 'Downloading your trip…';
-      const source = await getCloudTrip(item.cloudId);
-      const access = await getCloudAccess(item.cloudId);
-      const payload = await decodeTripArchive(await downloadCloudTrip(source));
-      const id = await restoreTripArchive(payload, { asCopy: true });
-      bindCloudTrip(id, {
-        id: source.id,
-        revision: source.revision,
-        ownerUid: source.ownerUid,
-        accountId: cloudUser.value.uid,
-        editable:
-          source.ownerUid === cloudUser.value.uid ||
-          access.editorEmails.includes(cloudUser.value.email.toLowerCase()),
-        savedAt: source.updatedAt?.toMillis() || 0,
-      });
-      await openLocal(id);
+      const { tripId } = await saveCloudTripOnDevice(item.cloudId, { legacy: true });
+      await openLocal(tripId);
     } finally {
       opening.value = '';
     }
@@ -549,6 +582,10 @@ onBeforeUnmount(() => {
       <AppAlert v-if="cloudError" tone="danger" class="library-alert" @close="cloudError = ''">{{
         cloudError
       }}</AppAlert>
+      <AppAlert v-if="!online" class="library-alert library-offline"
+        >Offline. Trips on this device open and save normally; changes upload when you reconnect.
+        Trips marked “Not on this device” need a connection.</AppAlert
+      >
       <div
         class="library-drop-zone"
         :class="{ dragging }"
@@ -572,21 +609,27 @@ onBeforeUnmount(() => {
                 v-for="item in group.trips"
                 :key="item.localId || item.cloudId"
                 class="trip-card"
+                :class="{ 'trip-card-unavailable': !item.localId && !online }"
               >
                 <div class="trip-card-top">
-                  <span class="trip-storage"
-                    ><i
-                      aria-hidden="true"
-                      :class="'bi bi-' + (item.cloudId ? 'cloud-check' : 'device-ssd')"
-                    ></i>
-                    {{ connection(item) }}</span
-                  >
+                  <ul class="trip-status" aria-label="Trip status">
+                    <li
+                      v-for="chip in statusChips(item)"
+                      :key="chip.id"
+                      :class="'trip-chip trip-chip-' + chip.tone"
+                      :title="chip.title"
+                    >
+                      <i aria-hidden="true" :class="'bi bi-' + chip.icon"></i> {{ chip.label }}
+                    </li>
+                  </ul>
                   <details class="trip-card-menu" name="trip-actions">
                     <summary :aria-label="'Options for ' + item.name">
                       <i aria-hidden="true" class="bi bi-three-dots"></i>
                     </summary>
                     <div>
-                      <button
+                      <button :disabled="busy" @click="checkOffline(item)">
+                        <i class="bi bi-wifi-off" aria-hidden="true"></i> Offline readiness…</button
+                      ><button
                         :disabled="busy || (!item.localId && !online)"
                         @click="run(() => exportTrip(item))"
                       >
@@ -624,10 +667,20 @@ onBeforeUnmount(() => {
                   {{
                     item.stopCount !== undefined
                       ? item.stopCount + (item.stopCount === 1 ? ' stop' : ' stops')
-                      : 'Open to download for offline use'
+                      : online
+                        ? 'Stops load when downloaded'
+                        : 'Needs a connection to download'
                   }}<span v-if="item.timeZone"> · {{ item.timeZone.replaceAll('_', ' ') }}</span>
                 </p>
                 <div class="trip-card-footer">
+                  <button
+                    v-if="!item.localId"
+                    :disabled="busy || !canDownload"
+                    title="Save on this device so it opens offline"
+                    @click="download(item)"
+                  >
+                    <i aria-hidden="true" class="bi bi-cloud-arrow-down"></i> Download
+                  </button>
                   <button
                     class="primary"
                     :disabled="busy || (!item.localId && (!online || !cloudReady))"
@@ -788,6 +841,47 @@ onBeforeUnmount(() => {
             {{ removal.cloud ? 'Delete cloud trip' : 'Export & remove device copy' }}
           </button>
         </div></template
+      >
+    </dialog>
+    <dialog ref="readinessDialog" class="library-dialog" @close="readiness = null">
+      <template v-if="readinessItem"
+        ><div class="library-dialog-heading">
+          <h2>Ready for offline?</h2>
+          <button aria-label="Close offline readiness" @click="readinessDialog.close()">
+            <i aria-hidden="true" class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <p>
+          <strong>{{ readinessItem.name }}</strong>
+        </p>
+        <ul class="readiness-list">
+          <li
+            v-for="check in readinessChecks"
+            :key="check.title"
+            :class="'readiness-' + check.state"
+          >
+            <i
+              aria-hidden="true"
+              :class="
+                'bi bi-' +
+                { ok: 'check-circle-fill', todo: 'exclamation-circle-fill', info: 'info-circle' }[
+                  check.state
+                ]
+              "
+            ></i>
+            <div>
+              <strong>{{ check.title }}</strong>
+              <p v-if="check.detail">{{ check.detail }}</p>
+              <button
+                v-if="check.action === 'download'"
+                :disabled="busy || !canDownload"
+                @click="download(readinessItem)"
+              >
+                <i aria-hidden="true" class="bi bi-cloud-arrow-down"></i> Download
+              </button>
+            </div>
+          </li>
+        </ul></template
       >
     </dialog>
   </div>

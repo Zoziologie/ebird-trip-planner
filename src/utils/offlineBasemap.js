@@ -85,7 +85,7 @@ function tileBounds(key) {
   return [(x / n) * 360 - 180, lat(y + 1), ((x + 1) / n) * 360 - 180, lat(y)];
 }
 // Tiles saved by the service worker (and Mapbox's own cache), as `tileset/z/x/y`.
-async function cachedTiles() {
+export async function cachedTiles() {
   const tiles = new Set();
   for (const name of ['mapbox-map-tiles', 'mapbox-tiles']) {
     if (!(await caches.has(name))) continue;

@@ -15,6 +15,9 @@ import { workspaceReload } from './workspaceEvents';
 export { workspaceReload } from './workspaceEvents';
 
 export const workspaceStatuses = ref({});
+// The same status as a state the trip library can show: device (no cloud copy), syncing,
+// synced, pending (offline changes waiting to upload), sign-in or error.
+export const workspaceSyncStates = ref({});
 export const workspaceStatus = computed(
   () => workspaceStatuses.value[selectedTripId.value] || 'Saved on this device',
 );
@@ -37,8 +40,9 @@ const retain = (entry) => {
 // A live listener brings collaborators' commits in, and edits merge per stop and field.
 export const watchWorkspaceSync = (tripId) => {
   if (coordinators.has(tripId)) return retain(coordinators.get(tripId));
-  const status = (message) => {
+  const status = (message, state) => {
     workspaceStatuses.value = { ...workspaceStatuses.value, [tripId]: message };
+    workspaceSyncStates.value = { ...workspaceSyncStates.value, [tripId]: state };
   };
   let timer;
   let stopped = false;
@@ -75,31 +79,32 @@ export const watchWorkspaceSync = (tripId) => {
       result.recoveryId
         ? 'Merged collaborator changes · overlapping device edits in recovery copies'
         : 'Saved to cloud',
+      'synced',
     );
   };
   const sync = async () => {
     const state = await db.workspaceSync.get(tripId);
     if (!state?.cloudId) {
       unwatch();
-      status('Saved on this device');
+      status('Saved on this device', 'device');
       return;
     }
     const local = await readWorkspacePlan(tripId);
     if (!navigator.onLine) {
+      const saved = samePlan(local, state.basePlan);
       status(
-        samePlan(local, state.basePlan)
-          ? 'Offline · saved on this device'
-          : 'Offline · changes saved on this device',
+        saved ? 'Offline · saved on this device' : 'Offline · changes saved on this device',
+        saved ? 'synced' : 'pending',
       );
       return;
     }
     if (cloudUser.value?.uid !== state.accountId) {
       unwatch();
-      status('Saved on this device · sign in to sync');
+      status('Saved on this device · sign in to sync', 'sign-in');
       return;
     }
     watch(state.cloudId);
-    status('Syncing…');
+    status('Syncing…', 'syncing');
     const cloud = await getWorkspaceCloud(state.cloudId);
     if (!cloud) throw new Error('The shared trip is unavailable. Device changes are kept.');
     if (state.pending && cloud.commitId === state.pending.commitId) {
@@ -112,7 +117,7 @@ export const watchWorkspaceSync = (tripId) => {
       return;
     }
     if (samePlan(local, state.basePlan)) {
-      status('Saved to cloud');
+      status('Saved to cloud', 'synced');
       return;
     }
     const pending = state.pending || { commitId: crypto.randomUUID(), plan: local };
@@ -127,7 +132,7 @@ export const watchWorkspaceSync = (tripId) => {
       await merge(saved);
     } else {
       await acknowledgePlan(tripId, saved);
-      status('Saved to cloud');
+      status('Saved to cloud', 'synced');
       // Edits made during the request belong to the next commit, not this one.
       again = !samePlan(await readWorkspacePlan(tripId), saved.plan);
     }
@@ -137,7 +142,7 @@ export const watchWorkspaceSync = (tripId) => {
     const state = await db.workspaceSync.get(tripId);
     if (navigator.onLine && state?.cloudId)
       await syncPersonalLists(tripId, state).catch((error) => {
-        status(`Trip saved · personal lists could not sync: ${error.message}`);
+        status(`Trip saved · personal lists could not sync: ${error.message}`, 'error');
       });
   };
   const flush = async () => {
@@ -154,7 +159,7 @@ export const watchWorkspaceSync = (tripId) => {
         else await syncCycle();
       } while (again && !stopped);
     } catch (error) {
-      status(`Saved on this device · ${error.message}`);
+      status(`Saved on this device · ${error.message}`, 'error');
     } finally {
       running = false;
     }
@@ -169,7 +174,7 @@ export const watchWorkspaceSync = (tripId) => {
   ]).subscribe({
     next: schedule,
     error: (error) => {
-      status(`Device save error: ${error.message}`);
+      status(`Device save error: ${error.message}`, 'error');
     },
   });
   window.addEventListener('online', flush);

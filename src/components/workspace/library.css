@@ -153,15 +153,78 @@
   gap: 10px;
   align-items: center;
 }
-.trip-storage {
-  color: var(--green);
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.trip-card-top {
+  align-items: flex-start;
 }
-.trip-storage i {
-  font-size: 15px;
+.trip-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.trip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.trip-chip-ok {
+  background: var(--tint);
+  color: var(--green-dark);
+}
+.trip-chip-muted {
+  background: #f0f2ef;
+  color: var(--muted);
+}
+.trip-chip-warn {
+  background: #fbf0dc;
+  color: #7a4f0e;
+}
+.trip-card-unavailable {
+  opacity: 0.6;
+}
+.trip-card-footer {
+  flex-wrap: wrap;
+}
+.readiness-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.readiness-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.readiness-list li > i {
+  font-size: 17px;
+  line-height: 1.3;
+}
+.readiness-list p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.readiness-list button {
+  margin-top: 8px;
+}
+.readiness-ok > i {
+  color: var(--green);
+}
+.readiness-todo > i {
+  color: #b7791f;
+}
+.readiness-info > i {
+  color: var(--muted);
 }
 .trip-card h3 {
   font-size: 21px;

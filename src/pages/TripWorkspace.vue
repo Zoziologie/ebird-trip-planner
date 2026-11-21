@@ -19,7 +19,6 @@ import {
   cloudReady,
   cloudBindings,
   cloudLibrary,
-  bindCloudTrip,
 } from '../state/cloudTrips';
 import { workspaceStatus, workspaceReload, watchWorkspaceSync } from '../state/workspaceSync';
 import {
@@ -36,16 +35,11 @@ import {
   signOutCloud,
   getCloudTrip,
   getCloudAccess,
-  downloadCloudTrip,
   setCloudSharing,
   recordCloudActivity,
 } from '../utils/firebaseCloud';
-import {
-  restoreTripArchive,
-  readLocationChecklists,
-  readLocationDistances,
-} from '../utils/tripData';
-import { decodeTripArchive } from '../utils/tripArchive';
+import { readLocationChecklists, readLocationDistances } from '../utils/tripData';
+import { saveCloudTripOnDevice } from '../utils/tripDownload';
 import TripWorkspaceView from '../components/TripWorkspaceView.vue';
 import WorkspaceLoading from '../components/WorkspaceLoading.vue';
 import AppAlert from '../components/AppAlert.vue';
@@ -189,17 +183,6 @@ const run = async (action) => {
     busy.value = false;
   }
 };
-const bindDataset = (tripId, trip) =>
-  bindCloudTrip(tripId, {
-    id: trip.id,
-    revision: trip.revision,
-    ownerUid: trip.ownerUid,
-    accountId: cloudUser.value.uid,
-    editable: true,
-    savedAt: Date.now(),
-    savedLocalEdit: 0,
-    savedVisitCount: 0,
-  });
 const canEdit = async (id) => {
   if (!cloudUser.value) return false;
   if (!navigator.onLine)
@@ -218,38 +201,10 @@ const canEdit = async (id) => {
   }
 };
 const openSharedEditor = async (id) => {
-  const cloud = await getWorkspaceCloud(id);
-  if (!cloud)
-    throw new Error(
-      'This trip has not been enabled for the new workspace yet. Open it from Trips first.',
-    );
-  const existing = (await db.workspaceSync.where('cloudId').equals(id).toArray()).find(
-    (item) => item.accountId === cloudUser.value.uid,
-  );
-  if (existing && (await db.trips.get(existing.tripId))) {
-    await db.workspaceSync.update(existing.tripId, { accountId: cloudUser.value.uid });
-    selectedTripId.value = existing.tripId;
-    return;
-  }
-  const source = await getCloudTrip(id);
-  loadingMessage.value = 'Downloading your trip…';
-  const payload = await decodeTripArchive(await downloadCloudTrip(source));
-  const tripId = await restoreTripArchive(payload, { asCopy: true });
-  await prepareWorkspace(tripId);
-  await db.transaction('rw', db.trips, db.visits, db.workspaceSync, async () => {
-    await applyWorkspacePlan(tripId, cloud.plan);
-    await db.workspaceSync.put({
-      tripId,
-      cloudId: id,
-      accountId: cloudUser.value.uid,
-      revision: cloud.revision,
-      basePlan: cloud.plan,
-      lastSavedAt: Date.now(),
-    });
+  const { tripId, downloaded } = await saveCloudTripOnDevice(id, {
+    onDownload: () => (loadingMessage.value = 'Downloading your trip…'),
   });
-  bindDataset(tripId, source);
-  await refreshTrips();
-  selectedVisitId.value = '';
+  if (downloaded) selectedVisitId.value = '';
   selectedTripId.value = tripId;
 };
 const attachLocal = async (tripId) => {
